@@ -7,6 +7,7 @@ import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { MobileOtp } from "@/components/otp";
+import { AuthFrame } from "@/components/site/auth-frame";
 import { useTenantSlug } from "@/lib/tenant";
 
 /** AUTH-11: same response whether or not the account exists; the code only arrives if it does. */
@@ -35,8 +36,7 @@ export default function ForgotPage() {
   };
 
   return (
-    <div className="mx-auto max-w-sm">
-      <h1 className="mb-2 text-xl font-bold">بازیابی رمز عبور</h1>
+    <AuthFrame title="بازیابی رمز عبور" subtitle={done ? undefined : proof ? "رمز عبور جدید را تعیین کنید." : "اگر برای این شماره حساب وجود داشته باشد، کد تأیید پیامک می‌شود."}>
       {done ? (
         <div className="flex flex-col gap-4">
           <p role="status" className="flex items-center gap-2 rounded-md bg-success-bg px-3 py-3 text-sm text-success">
@@ -46,7 +46,7 @@ export default function ForgotPage() {
           <Link href={`/${slug}/login`} className="flex min-h-11 items-center justify-center rounded-md bg-primary font-medium text-on-primary">ورود</Link>
         </div>
       ) : proof ? (
-        <form onSubmit={submit} className="mt-4 flex flex-col gap-4" noValidate>
+        <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
           <Field label="رمز عبور جدید" required hint="حداقل ۸ کاراکتر">
             {(p) => <Input {...p} className="h-11" type="password" dir="ltr" autoComplete="new-password" value={password.value} onChange={(e) => setPassword({ ...password, value: e.target.value })} />}
           </Field>
@@ -58,13 +58,12 @@ export default function ForgotPage() {
         </form>
       ) : (
         <>
-          <p className="mb-6 text-sm text-muted-foreground">اگر برای این شماره حساب وجود داشته باشد، کد تأیید پیامک می‌شود.</p>
           <MobileOtp tenant={slug} purpose="reset_password" submitLabel="ادامه" onCode={async (mobile, code) => {
             const r = await api<{ proof: string }>("/v1/auth/otp/verify", { method: "POST", public: true, body: { mobile, purpose: "reset_password", code } });
             setProof(r.proof);
           }} />
         </>
       )}
-    </div>
+    </AuthFrame>
   );
 }

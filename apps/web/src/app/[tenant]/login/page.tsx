@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import { MobileOtp } from "@/components/otp";
+import { AuthFrame } from "@/components/site/auth-frame";
 import { useTenantSlug } from "@/lib/tenant";
 
 /** Returns an MFA token when the account has 2FA, otherwise null (session cookies are set). */
@@ -53,17 +54,15 @@ function LoginInner() {
 
   if (mfaToken) {
     return (
-      <div className="mx-auto max-w-sm">
-        <h1 className="mb-6 text-xl font-bold">تأیید دومرحله‌ای</h1>
+      <AuthFrame title="تأیید دومرحله‌ای" subtitle="برای امنیت بیشتر، کد برنامه احراز هویت را وارد کنید.">
         <SecondFactorForm mfaToken={mfaToken} onDone={done} size="lg" />
-      </div>
+      </AuthFrame>
     );
   }
 
   return (
-    <div className="mx-auto max-w-sm">
-      <h1 className="mb-6 text-xl font-bold">ورود به حساب</h1>
-      <div role="tablist" aria-label="روش ورود" className="mb-6 grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
+    <AuthFrame title="ورود به حساب" subtitle="با رمز عبور یا کد پیامکی وارد شوید.">
+      <div role="tablist" aria-label="روش ورود" className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
         {([["password", "با رمز عبور"], ["otp", "با کد پیامکی"]] as const).map(([k, label]) => (
           <button
             key={k}
@@ -71,7 +70,7 @@ function LoginInner() {
             type="button"
             aria-selected={mode === k}
             onClick={() => setMode(k)}
-            className={`min-h-11 cursor-pointer rounded-md text-sm font-medium ${mode === k ? "bg-card shadow-sm" : "text-muted-foreground"}`}
+            className={`min-h-11 cursor-pointer rounded-lg text-sm font-medium transition-colors ${mode === k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
           >
             {label}
           </button>
@@ -96,10 +95,10 @@ function LoginInner() {
           else await done();
         }} />
       )}
-      <p className="mt-8 text-center text-sm text-muted-foreground">
+      <p className="mt-8 border-t border-border pt-6 text-center text-sm text-muted-foreground">
         حساب ندارید؟ <Link href={`/${slug}/register`} className="text-primary underline">ثبت‌نام کنید</Link>
       </p>
-    </div>
+    </AuthFrame>
   );
 }
 

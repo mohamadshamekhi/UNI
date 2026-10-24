@@ -10,10 +10,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { MobileOtp } from "@/components/otp";
+import { AuthFrame, StepRail } from "@/components/site/auth-frame";
 import { DocumentUpload, EMPTY_PROFILE, ProfileFields, Steps, UnitPicker, profilePayload, type Kind, type ProfileValues, type Uploaded } from "@/components/registration/fields";
 import { usePublicUnits, useTenantSlug } from "@/lib/tenant";
 
 const STEPS = ["دانشکده", "اطلاعات", "موبایل", "مدارک", "رمز عبور"];
+const RAIL = [
+  { title: "دانشکده و نوع عضویت", hint: "دانشجو یا استاد، و محل تحصیل یا خدمت" },
+  { title: "اطلاعات هویتی", hint: "نام، شماره دانشجویی و اطلاعات تحصیلی" },
+  { title: "تأیید موبایل", hint: "کد ۶ رقمی پیامک‌شده" },
+  { title: "بارگذاری مدرک", hint: "کارت دانشجویی یا حکم کارگزینی" },
+  { title: "رمز عبور", hint: "تعیین رمز و پذیرش شرایط" },
+];
 const NID_RE = /^\d{10}$/;
 const toAscii = (s: string) => s.replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
 
@@ -103,14 +111,28 @@ export default function RegisterPage() {
   if (units.isPending) return <Loading />;
 
   return (
-    <div className="mx-auto max-w-lg">
-      <Steps steps={STEPS} current={step} />
-      <h1 ref={heading} tabIndex={-1} className="mb-1 text-xl font-bold outline-none">
-        {["دانشکده و نوع عضویت", "اطلاعات هویتی و تحصیلی", "تأیید شماره موبایل", "بارگذاری مدارک", "تعیین رمز عبور"][step]}
-      </h1>
-      <p className="mb-6 text-sm text-muted-foreground">
-        مرحله {toFaDigits(String(step + 1))} از {toFaDigits(String(STEPS.length))}
-      </p>
+    <AuthFrame
+      wide
+      title="ثبت‌نام در سامانه"
+      subtitle="کمتر از پنج دقیقه؛ نتیجه بررسی با پیامک اطلاع داده می‌شود."
+      aside={
+        <>
+          <p className="mb-6 text-sm font-semibold text-gold-bright">مراحل ثبت‌نام</p>
+          <StepRail steps={RAIL} current={step} />
+        </>
+      }
+    >
+      <div className="lg:hidden">
+        <Steps steps={STEPS} current={step} />
+      </div>
+      <div className="mb-6 flex items-baseline justify-between gap-3 border-b border-border pb-4">
+        <h2 ref={heading} tabIndex={-1} className="text-lg font-bold outline-none">
+          {RAIL[step]!.title}
+        </h2>
+        <span className="shrink-0 text-sm text-muted-foreground">
+          مرحله {toFaDigits(String(step + 1))} از {toFaDigits(String(STEPS.length))}
+        </span>
+      </div>
 
       {step === 0 && (
         <form onSubmit={next} className="flex flex-col gap-5" noValidate>
@@ -118,7 +140,7 @@ export default function RegisterPage() {
             <legend className="mb-2 text-sm font-medium">ثبت‌نام به عنوان</legend>
             <div className="grid grid-cols-2 gap-3">
               {([["student", "دانشجو", GraduationCap], ["faculty", "استاد", Presentation]] as const).map(([k, label, Icon]) => (
-                <label key={k} className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 ${kind === k ? "border-primary bg-info-bg" : "border-border bg-card"}`}>
+                <label key={k} className={`flex min-h-16 cursor-pointer items-center gap-3 rounded-2xl border-2 px-4 py-3 transition-colors ${kind === k ? "border-primary bg-info-bg" : "border-border bg-card hover:border-[color-mix(in_oklab,var(--primary)_35%,var(--border))]"}`}>
                   <input type="radio" name="kind" value={k} checked={kind === k} onChange={() => setKind(k)} className="size-4 accent-[var(--primary)]" />
                   <Icon aria-hidden className="size-5" />
                   <span className="font-medium">{label}</span>
@@ -213,11 +235,11 @@ export default function RegisterPage() {
         </form>
       )}
 
-      <p className="mt-8 text-center text-sm text-muted-foreground">
+      <p className="mt-8 border-t border-border pt-6 text-center text-sm text-muted-foreground">
         قبلاً ثبت‌نام کرده‌اید؟{" "}
         <Link href={`/${slug}/login`} className="text-primary underline">وارد شوید</Link>
       </p>
-    </div>
+    </AuthFrame>
   );
 }
 
