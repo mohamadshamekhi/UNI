@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { and, desc, eq, gte, lte, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gte, lte, sql, type SQL } from 'drizzle-orm';
 import { requestContext } from '../../common/context/request-context.js';
 import { DbService } from '../../database/db.service.js';
-import { auditLogs } from '../../database/schema.js';
+import { auditLogs, users } from '../../database/schema.js';
 
 export interface AuditEntry {
   action: string;
@@ -119,8 +119,10 @@ export class AuditService {
     const exec = q.tenantId && !asSystem ? undefined : this.db.sys;
     const query = (x: Pick<DbService['sys'], 'select'>) =>
       x
-        .select()
+        // actor display name for reviewers; users is a global table outside RLS
+        .select({ ...getTableColumns(auditLogs), actorName: users.fullName })
         .from(auditLogs)
+        .leftJoin(users, eq(users.id, auditLogs.actorUserId))
         .where(and(...where))
         .orderBy(desc(auditLogs.seq))
         .limit(q.limit)

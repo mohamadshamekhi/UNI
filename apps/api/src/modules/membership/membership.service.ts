@@ -24,6 +24,7 @@ import { FilesService, type FileRow } from '../files/files.service.js';
 import { assertPasswordPolicy, hashPassword } from '../identity/password.js';
 import { TokensService } from '../identity/tokens.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
+import { readImportFile, type ImportRow } from './import.js';
 
 export type Membership = typeof memberships.$inferSelect;
 
@@ -554,5 +555,79 @@ export class MembershipService implements OnModuleInit {
       await this.audit.record({ action: 'membership.invited', targetType: 'membership', targetId: m!.id, after: { kind: input.kind, unitId: input.unitId } });
       return { userId: user.id, membershipId: m!.id };
     });
+  }
+
+  // ------------------------------------------------------------------ bulk import (AUTH-16)
+
+  /**
+   * Validates every row (dry run) or creates the valid ones. Each row is created in its own
+   * savepoint, so a bad row never undoes the others. Units match by code or exact name.
+   */
+  async importMembers(buffer: Buffer, opts: { dryRun: boolean }) {
+    const rows = await readImportFile(buffer);
+    const units = await this.db.run((tx) =>
+      tx.select({ id: orgUnits.id, code: orgUnits.code, nameFa: orgUnits.nameFa }).from(orgUnits).where(eq(orgUnits.status, 'active')),
+    );
+    const unitByKey = new Map<string, string>();
+    for (const u of units) {
+      unitByKey.set(normalizeFa(u.nameFa), u.id);
+      if (u.code) unitByKey.set(normalizeFa(u.code).toLowerCase(), u.id);
+    }
+    const seenMobile = new Set<string>();
+    const seenMemberNo = new Set<string>();
+
+    type Result = ImportRow & { unitId?: string; status: 'ready' | 'error' | 'created'; errors: string[] };
+    const results: Result[] = [];
+    for (const r of rows) {
+      const errors: string[] = [];
+      const mobile = r.mobile ? normalizeMobile(r.mobile) : null;
+      const unitId = r.unit ? (unitByKey.get(normalizeFa(r.unit).toLowerCase()) ?? unitByKey.get(normalizeFa(r.unit))) : undefined;
+      if (!r.kind) errors.push('نوع عضویت نامعتبر است (دانشجو، استاد یا کارمند).');
+      if (!r.fullName || r.fullName.length < 3) errors.push('نام و نام خانوادگی لازم است.');
+      if (!mobile) errors.push('شماره موبایل معتبر نیست.');
+      else if (seenMobile.has(mobile)) errors.push('این شماره موبایل در فایل تکراری است.');
+      if (r.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email)) errors.push('ایمیل معتبر نیست.');
+      if (!unitId) errors.push('واحد پیدا نشد؛ کد یا نام دقیق واحد را وارد کنید.');
+      else if (!(await this.acl.has('membership.manage', { unitId }))) errors.push('اجازه افزودن عضو به این واحد را ندارید.');
+      if (r.memberNo) {
+        if (seenMemberNo.has(r.memberNo)) errors.push('شماره دانشجویی/پرسنلی در فایل تکراری است.');
+        seenMemberNo.add(r.memberNo);
+      }
+      if (mobile) seenMobile.add(mobile);
+      if (mobile && errors.length === 0) {
+        const existing = await this.db.run((tx) =>
+          tx
+            .select({ id: memberships.id })
+            .from(memberships)
+            .innerJoin(users, eq(users.id, memberships.userId))
+            .where(and(eq(users.mobile, mobile), eq(memberships.tenantId, this.tenantId())))
+            .limit(1),
+        );
+        if (existing.length) errors.push('این فرد قبلاً در سازمان عضویت دارد.');
+      }
+      results.push({ ...r, mobile: mobile ?? r.mobile, unitId, status: errors.length ? 'error' : 'ready', errors });
+    }
+
+    if (!opts.dryRun) {
+      for (const r of results.filter((x) => x.status === 'ready')) {
+        try {
+          await this.db.savepoint(() =>
+            this.invite({ kind: r.kind!, fullName: r.fullName!, mobile: r.mobile!, email: r.email, unitId: r.unitId!, memberNo: r.memberNo }),
+          );
+          r.status = 'created';
+        } catch (err) {
+          r.status = 'error';
+          r.errors.push(err instanceof AppError ? err.message : 'خطای ناشناخته');
+        }
+      }
+      await this.audit.record({
+        action: 'membership.imported',
+        targetType: 'tenant',
+        targetId: this.tenantId(),
+        after: { total: results.length, created: results.filter((r) => r.status === 'created').length, failed: results.filter((r) => r.status === 'error').length },
+      });
+    }
+    const count = (s: Result['status']) => results.filter((r) => r.status === s).length;
+    return { dryRun: opts.dryRun, total: results.length, ready: count('ready'), created: count('created'), failed: count('error'), rows: results };
   }
 }

@@ -40,6 +40,8 @@ export interface TenantSettings {
   passwordPolicy?: { minLength?: number };
   storageQuotaBytes?: number;
   membership?: { reapplyAfterDays?: number; revisionDeadlineDays?: number };
+  /** FIL-09: days after a final membership decision before identity documents are removed (unset = keep) */
+  retention?: { membershipDocsDays?: number };
 }
 
 export const users = pgTable('users', {
@@ -53,6 +55,9 @@ export const users = pgTable('users', {
   status: text('status').$type<'active' | 'disabled'>().notNull().default('active'),
   mobileVerifiedAt: ts('mobile_verified_at'),
   emailVerifiedAt: ts('email_verified_at'),
+  totpSecretEnc: text('totp_secret_enc'),
+  totpEnabledAt: ts('totp_enabled_at'),
+  recoveryCodeHashes: text('recovery_code_hashes').array().notNull().default(sql`'{}'`),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -192,6 +197,7 @@ export const fileObjects = pgTable('file_objects', {
   isConfidential: boolean('is_confidential').notNull().default(false),
   createdAt: createdAt(),
   deletedAt: ts('deleted_at'),
+  purgedAt: ts('purged_at'),
 });
 
 export const permissions = pgTable('permissions', {

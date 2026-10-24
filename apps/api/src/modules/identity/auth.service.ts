@@ -10,6 +10,7 @@ import { sessions, users } from '../../database/schema.js';
 import { RedisService } from '../../infra/redis.js';
 import { SmsProvider } from '../../infra/sms.js';
 import { AuditService } from '../audit/audit.service.js';
+import { MfaService } from './mfa.service.js';
 import { OtpService } from './otp.service.js';
 import { assertPasswordPolicy, hashPassword, verifyPassword } from './password.js';
 import { TokensService } from './tokens.service.js';
@@ -20,6 +21,8 @@ export interface TokenPair {
   accessExpiresInSec: number;
   sessionId: string;
 }
+
+export type LoginResult = TokenPair | ReturnType<MfaService['issueChallenge']>;
 
 const LOCK_PER_IP = { failures: 5, windowSec: 15 * 60 };
 const LOCK_GLOBAL = { failures: 20, windowSec: 15 * 60 };
@@ -35,6 +38,7 @@ export class AuthService {
     private readonly otp: OtpService,
     private readonly audit: AuditService,
     private readonly sms: SmsProvider,
+    private readonly mfa: MfaService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -75,7 +79,7 @@ export class AuthService {
     }
   }
 
-  async loginWithPassword(identifier: string, password: string): Promise<TokenPair> {
+  async loginWithPassword(identifier: string, password: string): Promise<LoginResult> {
     const ctx = requestContext.get();
     const ip = ctx.ip ?? 'unknown';
     await this.redis.hit(`login:ip:${ip}`, this.env.LOGIN_IP_LIMIT_PER_15MIN, 15 * 60);
@@ -97,17 +101,25 @@ export class AuthService {
     }
     if (user.status !== 'active') throw new AppError('ACCOUNT_DISABLED');
     await this.redis.client.del(`fail:login:${user.id}:${ip}`);
+    if (user.totpEnabledAt) return this.mfa.issueChallenge(user.id, 'password');
     return this.startSession(user.id, 'auth.login.password');
   }
 
-  async loginWithOtp(mobileInput: string, code: string): Promise<TokenPair> {
+  async loginWithOtp(mobileInput: string, code: string): Promise<LoginResult> {
     const mobile = normalizeMobile(mobileInput);
     if (!mobile) throw new AppError('OTP_INVALID');
     await this.otp.verify(mobile, 'login', code);
     const [user] = await this.db.sys.select().from(users).where(eq(users.mobile, mobile)).limit(1);
     if (!user) throw new AppError('OTP_INVALID');
     if (user.status !== 'active') throw new AppError('ACCOUNT_DISABLED');
+    if (user.totpEnabledAt) return this.mfa.issueChallenge(user.id, 'otp');
     return this.startSession(user.id, 'auth.login.otp');
+  }
+
+  /** Second step for accounts with TOTP enabled (AUTH-12). */
+  async loginWithSecondFactor(mfaToken: string, code: string): Promise<TokenPair> {
+    const { userId, via } = await this.mfa.completeChallenge(mfaToken, code);
+    return this.startSession(userId, `auth.login.${via}.2fa`);
   }
 
   async startSession(userId: string, auditAction: string): Promise<TokenPair> {

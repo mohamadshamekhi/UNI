@@ -1,5 +1,6 @@
 import {
   CreateBucketCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
@@ -44,6 +45,10 @@ export class StorageService implements OnApplicationBootstrap {
         ContentType: contentType,
       }),
     );
+  }
+
+  async delete(key: string) {
+    await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
   async get(key: string): Promise<Readable> {

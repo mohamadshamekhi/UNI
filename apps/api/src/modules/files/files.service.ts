@@ -28,7 +28,11 @@ interface DownloadClaims {
   uid: string;
   jti: string;
   typ: 'file_download';
+  /** inline preview allowed (images / PDF only), decided when the link is issued */
+  inl?: boolean;
 }
+
+const INLINE_MIMES = new Set(['image/jpeg', 'image/png', 'application/pdf']);
 
 const SCAN_QUEUE = 'files-scan';
 const DOWNLOAD_TOKEN_TTL_SEC = 60;
@@ -172,7 +176,7 @@ export class FilesService implements OnApplicationBootstrap, OnModuleDestroy {
    * Issues a single-use, user-bound download link valid for 60s (FIL-05/13), after checking
    * access at this moment. Views of confidential files are audited (FIL-06).
    */
-  async issueDownload(fileId: string) {
+  async issueDownload(fileId: string, opts: { inline?: boolean } = {}) {
     const ctx = requestContext.get();
     const file = await this.get(fileId);
     if (!(await this.canRead(file))) {
@@ -180,15 +184,16 @@ export class FilesService implements OnApplicationBootstrap, OnModuleDestroy {
       throw new AppError('NOT_FOUND');
     }
     if (file.scanStatus !== 'clean' && file.scanStatus !== 'skipped') throw new AppError('FILE_NOT_READY', { scanStatus: file.scanStatus });
-    const claims: DownloadClaims = { fid: file.id, tid: file.tenantId, uid: ctx.userId!, jti: randomUUID(), typ: 'file_download' };
+    const inline = !!opts.inline && INLINE_MIMES.has(file.mimeType);
+    const claims: DownloadClaims = { fid: file.id, tid: file.tenantId, uid: ctx.userId!, jti: randomUUID(), typ: 'file_download', ...(inline ? { inl: true } : {}) };
     const token = this.jwt.sign(claims, { secret: this.env.FILE_TOKEN_SECRET, expiresIn: DOWNLOAD_TOKEN_TTL_SEC, algorithm: 'HS256' });
     if (file.isConfidential) {
-      await this.audit.record({ action: 'file.confidential.viewed', targetType: 'file', targetId: file.id, after: { purpose: file.purpose } });
+      await this.audit.record({ action: 'file.confidential.viewed', targetType: 'file', targetId: file.id, after: { purpose: file.purpose, mode: inline ? 'preview' : 'download' } });
     }
-    return { url: `/v1/files/${file.id}/content?token=${encodeURIComponent(token)}`, expiresInSec: DOWNLOAD_TOKEN_TTL_SEC };
+    return { url: `/v1/files/${file.id}/content?token=${encodeURIComponent(token)}`, expiresInSec: DOWNLOAD_TOKEN_TTL_SEC, inline };
   }
 
-  async openDownload(fileId: string, token: string): Promise<{ file: FileRow; stream: Readable }> {
+  async openDownload(fileId: string, token: string): Promise<{ file: FileRow; stream: Readable; inline: boolean }> {
     let claims: DownloadClaims;
     try {
       claims = this.jwt.verify<DownloadClaims>(token, { secret: this.env.FILE_TOKEN_SECRET, algorithms: ['HS256'] });
@@ -202,6 +207,19 @@ export class FilesService implements OnApplicationBootstrap, OnModuleDestroy {
       tx.select().from(fileObjects).where(and(eq(fileObjects.id, fileId), isNull(fileObjects.deletedAt))),
     );
     if (!file || (file.scanStatus !== 'clean' && file.scanStatus !== 'skipped')) throw new AppError('FILE_TOKEN_INVALID');
+    return { file, stream: await this.storage.get(file.storageKey), inline: !!claims.inl && INLINE_MIMES.has(file.mimeType) };
+  }
+
+  /**
+   * Public, non-confidential file of a tenant (e.g. its logo). Never serves confidential or
+   * unscanned files, regardless of who asks.
+   */
+  async openPublic(tenantId: string, fileId: string, purpose: string): Promise<{ file: FileRow; stream: Readable } | null> {
+    const [file] = await this.db.sys
+      .select()
+      .from(fileObjects)
+      .where(and(eq(fileObjects.id, fileId), eq(fileObjects.tenantId, tenantId), eq(fileObjects.purpose, purpose), isNull(fileObjects.deletedAt)));
+    if (!file || file.isConfidential || (file.scanStatus !== 'clean' && file.scanStatus !== 'skipped')) return null;
     return { file, stream: await this.storage.get(file.storageKey) };
   }
 

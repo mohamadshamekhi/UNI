@@ -11,6 +11,7 @@ Object.assign(process.env, {
   JWT_PROOF_SECRET: 'test-proof-secret-0123456789abcdef01234',
   FILE_TOKEN_SECRET: 'test-file-secret-0123456789abcdef012345',
   HASH_PEPPER: 'test-pepper-0123456789abcdef0123456789ab',
+  DATA_ENC_KEY: 'test-data-key-0123456789abcdef0123456789',
   S3_ENDPOINT: 'http://localhost:59000',
   S3_ACCESS_KEY: 'uni_minio',
   S3_SECRET_KEY: 'uni_minio_dev',
@@ -18,6 +19,7 @@ Object.assign(process.env, {
   FILE_SCAN_MODE: 'skip',
   SMS_PROVIDER: 'memory',
   OUTBOX_POLLING: 'off',
+  MAINTENANCE: 'off',
   OTP_IP_LIMIT_PER_HOUR: '100000',
   LOGIN_IP_LIMIT_PER_15MIN: '100000',
 });

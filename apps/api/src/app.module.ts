@@ -17,6 +17,7 @@ import { AclModule } from './modules/acl/acl.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { FilesModule } from './modules/files/files.module.js';
 import { IdentityModule } from './modules/identity/identity.module.js';
+import { MaintenanceModule } from './modules/maintenance/maintenance.service.js';
 import { MembershipModule } from './modules/membership/membership.module.js';
 import { OrgModule } from './modules/org/org.module.js';
 import { OutboxModule } from './modules/outbox/outbox.module.js';
@@ -52,6 +53,7 @@ const env = loadEnv();
     OrgModule,
     FilesModule,
     MembershipModule,
+    MaintenanceModule,
   ],
   controllers: [HealthController],
   providers: [

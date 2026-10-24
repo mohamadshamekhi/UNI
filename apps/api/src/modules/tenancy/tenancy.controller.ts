@@ -1,4 +1,6 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
+import { AppError } from '../../common/errors/app-error.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -32,6 +34,10 @@ class PasswordPolicyDto {
   @IsOptional() @IsInt() @Min(8) @Max(64) minLength?: number;
 }
 
+class RetentionSettingsDto {
+  @IsOptional() @IsInt() @Min(30) @Max(3650) membershipDocsDays?: number;
+}
+
 class MembershipSettingsDto {
   @IsOptional() @IsInt() @Min(0) @Max(365) reapplyAfterDays?: number;
   @IsOptional() @IsInt() @Min(1) @Max(60) revisionDeadlineDays?: number;
@@ -45,6 +51,7 @@ class TenantSettingsDto {
   @IsOptional() @ValidateNested() @Type(() => BrandingDto) branding?: BrandingDto;
   @IsOptional() @ValidateNested() @Type(() => PasswordPolicyDto) passwordPolicy?: PasswordPolicyDto;
   @IsOptional() @ValidateNested() @Type(() => MembershipSettingsDto) membership?: MembershipSettingsDto;
+  @IsOptional() @ValidateNested() @Type(() => RetentionSettingsDto) retention?: RetentionSettingsDto;
 }
 
 /** Platform-only settings on top of the tenant ones. */
@@ -162,6 +169,23 @@ export class TenancyPublicController {
   @Get('tenants')
   list() {
     return this.tenants.publicList();
+  }
+
+  /** Public logo (UX-10); cached by browsers, served with a locked-down content policy. */
+  @Public()
+  @Get('tenants/:slug/logo')
+  async logo(@Param('slug') slug: string, @Res() res: Response) {
+    if (!/^[a-z0-9-]{1,40}$/.test(slug)) throw new AppError('NOT_FOUND');
+    const found = await this.tenants.publicLogo(slug);
+    if (!found) throw new AppError('NOT_FOUND');
+    res.setHeader('Content-Type', found.file.mimeType);
+    res.setHeader('Content-Length', String(found.file.sizeBytes));
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('ETag', `"${found.file.sha256}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    found.stream.pipe(res);
   }
 
   /** Branding and locale of the tenant resolved from X-Tenant / host (UX-10). */

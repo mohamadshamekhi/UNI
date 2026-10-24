@@ -9,6 +9,7 @@ import { normalizeMobile, toAsciiDigits } from '../../common/util/normalize.js';
 import { DbService } from '../../database/db.service.js';
 import { users, type OtpPurpose } from '../../database/schema.js';
 import { AuthService } from './auth.service.js';
+import { MfaService } from './mfa.service.js';
 import { OtpService } from './otp.service.js';
 import { TokensService } from './tokens.service.js';
 
@@ -44,6 +45,21 @@ class ResetBody {
   @IsString() @MaxLength(128) newPassword: string;
 }
 
+class SecondFactorBody {
+  @IsString() @IsNotEmpty() mfaToken: string;
+  /** 6-digit TOTP code or a recovery code (xxxx-xxxx) */
+  @IsString() @Length(6, 12) code: string;
+}
+
+class TotpCodeBody {
+  @IsString() @Length(6, 6) code: string;
+}
+
+class DisableTotpBody {
+  @IsString() @IsNotEmpty() password: string;
+  @IsString() @Length(6, 12) code: string;
+}
+
 class ChangePasswordBody {
   @IsString() @IsNotEmpty() currentPassword: string;
   @IsString() @MaxLength(128) newPassword: string;
@@ -62,6 +78,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly otp: OtpService,
     private readonly tokens: TokensService,
+    private readonly mfa: MfaService,
   ) {}
 
   /** Always answers the same shape, whether or not an account exists (AUTH-11). */
@@ -95,6 +112,40 @@ export class AuthController {
   @HttpCode(200)
   loginOtp(@Body() body: OtpLoginBody) {
     return this.auth.loginWithOtp(body.mobile, toAsciiDigits(body.code));
+  }
+
+  @Public()
+  @Post('login/2fa')
+  @HttpCode(200)
+  loginSecondFactor(@Body() body: SecondFactorBody) {
+    return this.auth.loginWithSecondFactor(body.mfaToken, toAsciiDigits(body.code));
+  }
+
+  @ApiBearerAuth()
+  @Get('2fa')
+  mfaStatus(@Ctx() ctx: RequestContext) {
+    return this.mfa.status(ctx.userId!);
+  }
+
+  @ApiBearerAuth()
+  @Post('2fa/setup')
+  @HttpCode(200)
+  mfaSetup(@Ctx() ctx: RequestContext) {
+    return this.mfa.setup(ctx.userId!);
+  }
+
+  @ApiBearerAuth()
+  @Post('2fa/enable')
+  @HttpCode(200)
+  mfaEnable(@Body() body: TotpCodeBody, @Ctx() ctx: RequestContext) {
+    return this.mfa.enable(ctx.userId!, toAsciiDigits(body.code));
+  }
+
+  @ApiBearerAuth()
+  @Post('2fa/disable')
+  @HttpCode(204)
+  async mfaDisable(@Body() body: DisableTotpBody, @Ctx() ctx: RequestContext) {
+    await this.mfa.disable(ctx.userId!, body.password, toAsciiDigits(body.code));
   }
 
   @Public()

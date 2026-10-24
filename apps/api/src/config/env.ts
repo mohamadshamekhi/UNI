@@ -18,6 +18,8 @@ const schema = z.object({
   JWT_PROOF_SECRET: secret,
   FILE_TOKEN_SECRET: secret,
   HASH_PEPPER: secret,
+  /** encrypts secrets at rest (TOTP seeds) */
+  DATA_ENC_KEY: secret,
   ACCESS_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(900),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
 

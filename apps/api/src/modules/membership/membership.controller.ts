@@ -1,6 +1,9 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { AppError } from '../../common/errors/app-error.js';
+import { IMPORT_MAX_BYTES } from './import.js';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayUnique,
@@ -75,6 +78,10 @@ class RevisionBody extends ReasonBody {
 
 class TransferBody extends ReasonBody {
   @IsUUID() unitId: string;
+}
+
+class ImportQuery {
+  @IsOptional() @Transform(({ value }) => value !== 'false' && value !== false) dryRun?: boolean;
 }
 
 class InviteBody {
@@ -193,6 +200,17 @@ export class MembershipAdminController {
   @HttpCode(200)
   end(@Param('id', ParseUUIDPipe) id: string, @Body() body: ReasonBody) {
     return this.memberships.setLifecycle(id, 'ended', body.reason);
+  }
+
+  /** AUTH-16: `?dryRun=true` validates only; otherwise creates the valid rows and reports the rest. */
+  @RequirePermission('membership.manage')
+  @ApiConsumes('multipart/form-data')
+  @Post('import')
+  @HttpCode(200)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: IMPORT_MAX_BYTES, files: 1 } }))
+  import(@UploadedFile() file: Express.Multer.File | undefined, @Query() q: ImportQuery) {
+    if (!file) throw new AppError('VALIDATION_FAILED', { field: 'file' });
+    return this.memberships.importMembers(file.buffer, { dryRun: q.dryRun ?? true });
   }
 
   @RequirePermission('membership.manage')

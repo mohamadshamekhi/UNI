@@ -56,6 +56,24 @@ export class DbService implements OnModuleDestroy {
   }
 
   /**
+   * Runs fn inside a savepoint of the request transaction, so one failing item (e.g. a row of a
+   * bulk import) rolls back alone without aborting the whole request.
+   */
+  async savepoint<T>(fn: () => Promise<T>): Promise<T> {
+    const ctx = requestContext.find();
+    const outer = ctx?.tx;
+    if (!outer || !ctx) return fn();
+    return outer.transaction(async (sp) => {
+      ctx.tx = sp;
+      try {
+        return await fn();
+      } finally {
+        ctx.tx = outer;
+      }
+    });
+  }
+
+  /**
    * Runs fn against a specific tenant (platform admin operations) while still under RLS. Inside a
    * request transaction the tenant setting is switched temporarily, keeping one atomic unit.
    */
