@@ -196,6 +196,7 @@ export default function RegisterPage() {
             {(p) => <Input {...p} className="h-11" type="password" dir="ltr" autoComplete="new-password" value={password.confirm} onChange={(e) => setPassword({ ...password, confirm: e.target.value })} />}
           </Field>
           <Checkbox label="شرایط استفاده و سیاست حریم خصوصی را می‌پذیرم." description="اطلاعات شما فقط برای بررسی عضویت و ارائه خدمات دانشگاه استفاده می‌شود." checked={terms} onChange={(e) => setTerms(e.target.checked)} />
+          <Link href="/terms" target="_blank" className="-mt-2 ms-6 text-sm text-primary underline">مطالعه متن شرایط و حریم خصوصی</Link>
           {errors.terms && <p role="alert" className="text-sm text-danger">{errors.terms}</p>}
           {submitError && (
             <div role="alert" className="rounded-md bg-danger-bg px-3 py-2 text-sm text-danger">

@@ -27,11 +27,11 @@ export function Dialog({ open, onClose, title, children, footer, wide }: { open:
         e.preventDefault();
         onClose();
       }}
-      className={`m-auto w-[calc(100%-2rem)] rounded-lg border border-border bg-card p-0 text-foreground shadow-xl ${wide ? "max-w-2xl" : "max-w-md"}`}
+      className={`m-auto w-[calc(100%-2rem)] rounded-2xl border border-border bg-card p-0 text-foreground shadow-[0_30px_80px_-20px_rgb(2_6_23/0.5)] ${wide ? "max-w-2xl" : "max-w-md"}`}
     >
       {open && (
         <div className="flex max-h-[85vh] flex-col">
-          <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+          <header className="flex items-center justify-between gap-2 border-b border-border px-5 py-4">
             <h2 id={titleId} className="font-semibold">
               {title}
             </h2>
@@ -39,8 +39,8 @@ export function Dialog({ open, onClose, title, children, footer, wide }: { open:
               <X aria-hidden className="size-4" />
             </button>
           </header>
-          <div className="overflow-y-auto px-4 py-4">{children}</div>
-          {footer && <footer className="flex flex-wrap justify-end gap-2 border-t border-border px-4 py-3">{footer}</footer>}
+          <div className="overflow-y-auto px-5 py-5">{children}</div>
+          {footer && <footer className="flex flex-wrap justify-end gap-2 border-t border-border bg-muted/40 px-5 py-3.5">{footer}</footer>}
         </div>
       )}
     </dialog>

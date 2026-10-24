@@ -8,7 +8,7 @@ export interface PublicTenant {
   slug: string;
   nameFa: string;
   nameEn: string | null;
-  branding: { primaryColor?: string; displayName?: string };
+  branding: { primaryColor?: string; displayName?: string; logoFileId?: string };
   calendar: "jalali" | "gregorian";
   enabledModules: string[];
 }

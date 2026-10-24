@@ -29,6 +29,7 @@ export interface TenantSettings {
   passwordPolicy?: { minLength?: number };
   storageQuotaBytes?: number;
   membership?: { reapplyAfterDays?: number; revisionDeadlineDays?: number };
+  retention?: { membershipDocsDays?: number };
 }
 
 export interface Tenant {
@@ -151,6 +152,7 @@ export interface AuditRow {
   occurredAt: string;
   actorType: "user" | "system";
   actorUserId: string | null;
+  actorName: string | null;
   action: string;
   targetType: string | null;
   targetId: string | null;

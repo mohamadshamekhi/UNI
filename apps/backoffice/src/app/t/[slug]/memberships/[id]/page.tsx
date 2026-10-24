@@ -1,7 +1,7 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Download, FileWarning } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, Download, Eye, FileText, FileWarning } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
@@ -149,10 +149,27 @@ function Detail({ m }: { m: MembershipDetail }) {
 
 function Documents({ files }: { files: FileInfo[] }) {
   const slug = useSlug();
-  const open = useMutation({
-    mutationFn: (id: string) => api<{ url: string }>(`/v1/files/${id}/download-link`, { method: "POST", tenant: slug }),
-    onSuccess: ({ url }) => window.location.assign(`/api/proxy${url}`),
-  });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  // previews open in a new tab; the tab is opened synchronously so popup blockers allow it
+  const open = async (f: FileInfo, inline: boolean) => {
+    setError(null);
+    setBusy(f.id + (inline ? ":v" : ":d"));
+    const win = inline ? window.open("about:blank", "_blank", "noopener=no") : null;
+    try {
+      const { url } = await api<{ url: string }>(`/v1/files/${f.id}/download-link`, { method: "POST", tenant: slug, body: { inline } });
+      if (win) {
+        win.opener = null;
+        win.location.href = `/api/proxy${url}`;
+      } else window.location.assign(`/api/proxy${url}`);
+    } catch (e) {
+      win?.close();
+      setError(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const previewable = (f: FileInfo) => f.mimeType === "application/pdf" || f.mimeType.startsWith("image/");
   return (
     <Card title="مدارک">
       {files.length === 0 ? (
@@ -162,8 +179,8 @@ function Documents({ files }: { files: FileInfo[] }) {
           {files.map((f) => {
             const ready = f.scanStatus === "clean" || f.scanStatus === "skipped";
             return (
-              <li key={f.id} className="flex items-center gap-3 rounded-md border border-border px-3 py-2">
-                {ready ? <Download aria-hidden className="size-4 text-muted-foreground" /> : <FileWarning aria-hidden className="size-4 text-warning" />}
+              <li key={f.id} className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2">
+                {ready ? <FileText aria-hidden className="size-4 text-muted-foreground" /> : <FileWarning aria-hidden className="size-4 text-warning" />}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{f.originalName}</span>
                   <span className="block text-xs text-muted-foreground">
@@ -171,16 +188,22 @@ function Documents({ files }: { files: FileInfo[] }) {
                     {!ready && ` · ${f.scanStatus === "pending" ? "در حال بررسی امنیتی" : "در قرنطینه"}`}
                   </span>
                 </span>
-                <Button size="sm" variant="secondary" disabled={!ready} loading={open.isPending && open.variables === f.id} onClick={() => open.mutate(f.id)}>
-                  دانلود
+                {previewable(f) && (
+                  <Button size="sm" variant="secondary" disabled={!ready} loading={busy === f.id + ":v"} onClick={() => open(f, true)}>
+                    <Eye aria-hidden className="size-4" />
+                    مشاهده
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" disabled={!ready} loading={busy === f.id + ":d"} onClick={() => open(f, false)} aria-label={`دانلود ${f.originalName}`}>
+                  <Download aria-hidden className="size-4" />
                 </Button>
               </li>
             );
           })}
         </ul>
       )}
-      {open.error && <p role="alert" className="mt-2 text-sm text-danger">{errorMessage(open.error)}</p>}
-      <p className="mt-3 text-xs text-muted-foreground">هر مشاهده مدرک محرمانه در ممیزی ثبت می‌شود.</p>
+      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
+      <p className="mt-3 text-xs text-muted-foreground">هر مشاهده یا دانلود مدرک محرمانه در ممیزی ثبت می‌شود.</p>
     </Card>
   );
 }

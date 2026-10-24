@@ -1,10 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { UserPlus } from "lucide-react";
+import { FileSpreadsheet, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { ImportDialog } from "@/components/membership/import-dialog";
 import { InviteDialog } from "@/components/membership/invite-dialog";
 import { Badge } from "@uni/shared/ui/badge";
 import { Button } from "@uni/shared/ui/button";
@@ -31,6 +32,7 @@ function MembershipsInner() {
   const offset = Number(sp.get("offset") ?? 0);
   const [q, setQ] = useState(sp.get("q") ?? "");
   const [inviting, setInviting] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   // filters live in the URL so views are shareable and survive back/forward
   const setParam = (patch: Record<string, string>) => {
@@ -59,10 +61,16 @@ function MembershipsInner() {
         description="درخواست‌های عضویت در واحدهایی که به آن‌ها دسترسی دارید"
         actions={
           can("membership.manage") && (
-            <Button onClick={() => setInviting(true)}>
-              <UserPlus aria-hidden className="size-4" />
-              دعوت عضو
-            </Button>
+            <>
+              <Button variant="secondary" onClick={() => setImporting(true)}>
+                <FileSpreadsheet aria-hidden className="size-4" />
+                ورود گروهی
+              </Button>
+              <Button onClick={() => setInviting(true)}>
+                <UserPlus aria-hidden className="size-4" />
+                دعوت عضو
+              </Button>
+            </>
           )
         }
       />
@@ -162,6 +170,7 @@ function MembershipsInner() {
         )}
       </QueryView>
       <InviteDialog open={inviting} onClose={() => setInviting(false)} />
+      <ImportDialog open={importing} onClose={() => setImporting(false)} />
     </>
   );
 }

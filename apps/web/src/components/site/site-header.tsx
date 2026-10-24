@@ -3,8 +3,8 @@
 import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Logo } from "./logo";
-import { ThemeToggle } from "./theme";
+import { Logo } from "@uni/shared/ui/logo";
+import { ThemeToggle } from "@uni/shared/ui/theme";
 
 const LINKS = [
   { href: "#universities", label: "دانشگاه‌ها" },
@@ -108,6 +108,9 @@ export function SiteFooter() {
             <li>داده هر دانشگاه کاملاً جدا</li>
             <li>مدارک رمزنگاری‌شده و ردیابی‌شده</li>
             <li>ثبت غیرقابل‌تغییر اقدامات حساس</li>
+            <li>
+              <Link href="/terms" className="text-primary hover:underline">شرایط استفاده و حریم خصوصی</Link>
+            </li>
           </ul>
         </div>
       </div>

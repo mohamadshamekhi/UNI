@@ -1,5 +1,7 @@
 "use client";
 
+import type React from "react";
+
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@uni/shared/api";
 import { toFaDigits } from "@uni/shared/format";
@@ -15,7 +17,6 @@ import {
   FileSearch,
   GraduationCap,
   Landmark,
-  Lock,
   Megaphone,
   Search,
   ShieldCheck,
@@ -29,6 +30,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { CountUp, Reveal } from "@/components/site/reveal";
 import { SiteFooter, SiteHeader } from "@/components/site/site-header";
 import { UniversityCard, UniversityCardSkeleton, type UniversityItem } from "@/components/site/university-card";
+import { Eyebrow, HeroBackdrop, HeroCurve, StatusPreview } from "@/components/site/sections";
 
 const BACKOFFICE_URL = process.env.NEXT_PUBLIC_BACKOFFICE_URL ?? "/";
 
@@ -56,15 +58,6 @@ const SERVICES = [
   { icon: CreditCard, title: "پرداخت آنلاین", text: "پرداخت امن هزینه خدمات و رویدادها با رسید قابل پیگیری.", tint: "#0369a1" },
 ];
 
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="inline-flex items-center gap-2 text-sm font-semibold text-gold">
-      <span aria-hidden className="h-px w-6 bg-gold" />
-      {children}
-    </p>
-  );
-}
-
 export default function Home() {
   const [q, setQ] = useState("");
   const deferred = useDeferredValue(q);
@@ -81,35 +74,30 @@ export default function Home() {
       <main id="main">
         {/* ============================================================ hero */}
         <section className="hero-band relative isolate overflow-hidden">
-          <div aria-hidden className="absolute inset-0 -z-10">
-            <span className="aurora aurora-1 top-[-10%] end-[-5%] size-[38rem]" />
-            <span className="aurora aurora-2 bottom-[-20%] start-[10%] size-[32rem]" />
-            <span className="aurora aurora-3 top-[20%] start-[-8%] size-[22rem]" />
-            <div className="grid-lines absolute inset-0" />
-          </div>
+          <HeroBackdrop />
 
           <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 pt-32 pb-28 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:pt-40 lg:pb-36">
             <div>
-              <Reveal>
+              <div className="enter">
                 <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-sm text-white/85 backdrop-blur">
                   <Sparkles aria-hidden className="size-4 text-gold-bright" />
                   سامانه یکپارچه خدمات آموزشی و پژوهشی
                 </p>
-              </Reveal>
-              <Reveal delay={80}>
+              </div>
+              <div className="enter" style={{ "--d": "80ms" } as React.CSSProperties}>
                 <h1 className="mt-6 text-[2.6rem] leading-[1.2] font-black tracking-tight text-balance sm:text-6xl sm:leading-[1.15]">
                   از ثبت‌نام تا دفاع،
                   <br />
                   <span className="text-gold-gradient">همه در یک سامانه.</span>
                 </h1>
-              </Reveal>
-              <Reveal delay={160}>
+              </div>
+              <div className="enter" style={{ "--d": "160ms" } as React.CSSProperties}>
                 <p className="mt-6 max-w-xl text-lg leading-9 text-white/75">
                   دانشگاه خود را پیدا کنید، آنلاین عضو شوید و مسیر درخواست‌هایتان را لحظه‌به‌لحظه ببینید؛ بدون نامه‌نگاری، بدون صف و مراجعه حضوری.
                 </p>
-              </Reveal>
+              </div>
 
-              <Reveal delay={240}>
+              <div className="enter" style={{ "--d": "240ms" } as React.CSSProperties}>
                 <form
                   role="search"
                   className="mt-9 max-w-xl"
@@ -135,9 +123,9 @@ export default function Home() {
                     </button>
                   </div>
                 </form>
-              </Reveal>
+              </div>
 
-              <Reveal delay={320}>
+              <div className="enter" style={{ "--d": "320ms" } as React.CSSProperties}>
                 <dl className="mt-10 grid max-w-xl grid-cols-3 divide-x divide-x-reverse divide-white/15 rounded-2xl border border-white/10 bg-white/5 backdrop-blur">
                   {[
                     { label: "دانشگاه و مؤسسه", value: tenants.data ? <CountUp value={tenants.data.length} /> : "…" },
@@ -150,16 +138,13 @@ export default function Home() {
                     </div>
                   ))}
                 </dl>
-              </Reveal>
+              </div>
             </div>
 
             <StatusPreview />
           </div>
 
-          {/* soft curve into the page */}
-          <svg aria-hidden viewBox="0 0 1440 80" preserveAspectRatio="none" className="absolute inset-x-0 -bottom-px h-14 w-full text-background sm:h-20">
-            <path d="M0 80V40C240 0 480 0 720 20S1200 60 1440 20V80Z" fill="currentColor" />
-          </svg>
+          <HeroCurve />
         </section>
 
         {/* ============================================================ directory */}
@@ -332,72 +317,5 @@ export default function Home() {
       </main>
       <SiteFooter />
     </>
-  );
-}
-
-/** Decorative preview of the applicant status screen. Fixed light palette (it sits on the dark hero). */
-function StatusPreview() {
-  const rows = [
-    { label: "ثبت درخواست", meta: "۱۴۰۵/۰۸/۰۲ · ۱۰:۲۴", state: "done" },
-    { label: "بررسی مدارک توسط کارشناس", meta: "در حال انجام", state: "current" },
-    { label: "فعال‌شدن عضویت", meta: "پس از تأیید", state: "todo" },
-  ] as const;
-  return (
-    <div aria-hidden className="relative mx-auto hidden w-full max-w-md lg:block">
-      <div className="float-slow">
-        <div className="rotate-[-2deg] rounded-3xl border border-white/30 bg-white/95 p-7 text-slate-900 shadow-[0_40px_80px_-24px_rgb(0_0_0/0.55)] backdrop-blur">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#2f6bff] to-[#1e3a8a] text-white">
-                <Landmark className="size-5" strokeWidth={1.75} />
-              </span>
-              <div>
-                <p className="text-sm font-bold">وضعیت عضویت</p>
-                <p className="text-xs text-slate-500">کارشناسی ارشد · دانشکده فنی</p>
-              </div>
-            </div>
-            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">در انتظار بررسی</span>
-          </div>
-          <div className="mt-6 h-1.5 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full w-1/2 rounded-full bg-gradient-to-l from-[#2f6bff] to-[#e0b44c]" />
-          </div>
-          <ol className="mt-6 space-y-5">
-            {rows.map((r) => (
-              <li key={r.label} className="flex items-start gap-3">
-                <span
-                  className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${
-                    r.state === "done" ? "bg-emerald-500 text-white" : r.state === "current" ? "border-2 border-blue-600 bg-white" : "border-2 border-slate-200 bg-white"
-                  }`}
-                >
-                  {r.state === "done" && <Check className="size-4" />}
-                  {r.state === "current" && <span className="size-2.5 animate-pulse rounded-full bg-blue-600" />}
-                </span>
-                <div className="flex-1">
-                  <p className={`text-sm ${r.state === "todo" ? "text-slate-400" : "font-semibold"}`}>{r.label}</p>
-                  <p className="text-xs text-slate-500">{r.meta}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-          <div className="mt-6 flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-600">
-            <Lock className="size-4 shrink-0 text-slate-400" />
-            مدارک شما رمزنگاری‌شده و فقط برای کارشناس مجاز قابل مشاهده است.
-          </div>
-        </div>
-      </div>
-      <div className="absolute -bottom-8 -start-10 flex rotate-[3deg] items-center gap-3 rounded-2xl border border-white/40 bg-white px-4 py-3 text-slate-900 shadow-2xl">
-        <span className="flex size-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-          <Check className="size-5" />
-        </span>
-        <div>
-          <p className="text-sm font-bold">شماره موبایل تأیید شد</p>
-          <p className="text-xs text-slate-500">کد ۶ رقمی · همین حالا</p>
-        </div>
-      </div>
-      <div className="absolute -top-6 -end-6 flex rotate-[4deg] items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm text-white backdrop-blur-md">
-        <Sparkles className="size-4 text-gold-bright" />
-        بدون مراجعه حضوری
-      </div>
-    </div>
   );
 }

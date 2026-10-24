@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { ImagePlus, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
 import { Button } from "@uni/shared/ui/button";
 import { Field, Input, Select } from "@uni/shared/ui/field";
 import { Card, PageHeader } from "@uni/shared/ui/layout";
@@ -33,7 +34,9 @@ function SettingsForm({ settings }: { settings: TenantSettings }) {
     minLength: String(settings.passwordPolicy?.minLength ?? 8),
     revisionDeadlineDays: String(settings.membership?.revisionDeadlineDays ?? 7),
     reapplyAfterDays: String(settings.membership?.reapplyAfterDays ?? 0),
+    membershipDocsDays: settings.retention?.membershipDocsDays ? String(settings.retention.membershipDocsDays) : "",
   });
+  const [logoFileId, setLogoFileId] = useState<string | undefined>(settings.branding?.logoFileId);
   const save = useMutation({
     mutationFn: () =>
       api("/v1/admin/tenant/settings", {
@@ -41,9 +44,10 @@ function SettingsForm({ settings }: { settings: TenantSettings }) {
         tenant: slug,
         body: {
           calendar: f.calendar,
-          branding: { ...settings.branding, displayName: f.displayName || undefined, primaryColor: f.primaryColor },
+          branding: { ...settings.branding, logoFileId, displayName: f.displayName || undefined, primaryColor: f.primaryColor },
           passwordPolicy: { minLength: Number(f.minLength) },
           membership: { revisionDeadlineDays: Number(f.revisionDeadlineDays), reapplyAfterDays: Number(f.reapplyAfterDays) },
+          retention: f.membershipDocsDays ? { membershipDocsDays: Number(f.membershipDocsDays) } : {},
         },
       }),
     onSuccess: () => {
@@ -62,7 +66,8 @@ function SettingsForm({ settings }: { settings: TenantSettings }) {
       }}
     >
       <Card title="هویت بصری">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <LogoField slug={slug} logoFileId={logoFileId} onChange={setLogoFileId} />
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Field label="نام نمایشی">{(p) => <Input {...p} value={f.displayName} onChange={set("displayName")} />}</Field>
           <Field label="رنگ اصلی" hint="برای پنل‌های دانشجو و استاد">
             {(p) => (
@@ -93,10 +98,67 @@ function SettingsForm({ settings }: { settings: TenantSettings }) {
           <Field label="فاصله درخواست مجدد پس از رد (روز)">{(p) => <Input {...p} type="number" min={0} max={365} dir="ltr" value={f.reapplyAfterDays} onChange={set("reapplyAfterDays")} />}</Field>
         </div>
       </Card>
+      <Card title="نگهداری داده">
+        <Field label="حذف مدارک هویتی پس از تصمیم نهایی (روز)" hint="خالی یعنی مدارک نگهداری می‌شوند. حداقل ۳۰ روز؛ حذف پس از ۷ روز مهلت از فضای ذخیره پاک می‌شود و در ممیزی ثبت می‌شود.">
+          {(p) => <Input {...p} type="number" min={30} max={3650} dir="ltr" placeholder="مثلاً ۳۶۵" value={f.membershipDocsDays} onChange={set("membershipDocsDays")} className="max-w-48" />}
+        </Field>
+      </Card>
       <div className="flex items-center gap-3">
         <Button type="submit" loading={save.isPending}>ذخیره تنظیمات</Button>
         {save.error && <p role="alert" className="text-sm text-danger">{errorMessage(save.error)}</p>}
       </div>
     </form>
+  );
+}
+
+/** Logo upload (UX-10): PNG/JPG up to 1 MB, shown on the public pages after saving. */
+function LogoField({ slug, logoFileId, onChange }: { slug: string; logoFileId?: string; onChange: (id: string | undefined) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const upload = async (file: File) => {
+    setError(null);
+    if (file.size > 1024 * 1024) return setError("حجم لوگو باید کمتر از ۱ مگابایت باشد.");
+    const fd = new FormData();
+    fd.set("purpose", "branding_logo");
+    fd.set("file", file);
+    setPending(true);
+    try {
+      const row = await api<{ id: string }>("/v1/files", { method: "POST", tenant: slug, body: fd });
+      onChange(row.id);
+      setPreview(URL.createObjectURL(file));
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setPending(false);
+      if (input.current) input.current.value = "";
+    }
+  };
+  const src = preview ?? (logoFileId ? `/api/proxy/v1/public/tenants/${slug}/logo?v=${logoFileId}` : null);
+  return (
+    <div className="flex flex-wrap items-center gap-4">
+      <div className="flex size-20 items-center justify-center overflow-hidden rounded-xl border border-border bg-white">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {src ? <img src={src} alt="لوگوی فعلی" className="max-h-full max-w-full object-contain p-2" /> : <span className="text-xs text-muted-foreground">بدون لوگو</span>}
+      </div>
+      <div className="flex flex-col gap-2">
+        <input ref={input} type="file" accept="image/png,image/jpeg" className="sr-only" id="logo-upload" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" loading={pending} onClick={() => input.current?.click()}>
+            <ImagePlus aria-hidden className="size-4" />
+            {logoFileId ? "تغییر لوگو" : "بارگذاری لوگو"}
+          </Button>
+          {logoFileId && (
+            <Button size="sm" variant="ghost" className="text-danger" onClick={() => { onChange(undefined); setPreview(null); }}>
+              <Trash2 aria-hidden className="size-4" />
+              حذف
+            </Button>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">PNG یا JPG مربعی، حداکثر ۱ مگابایت. پس از «ذخیره تنظیمات» نمایش داده می‌شود.</p>
+        {error && <p role="alert" className="text-xs text-danger">{error}</p>}
+      </div>
+    </div>
   );
 }

@@ -10,8 +10,16 @@ export function Reveal({ children, delay = 0, as: Tag = "div", className = "" }:
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    if (typeof IntersectionObserver === "undefined") {
+      const t = setTimeout(() => setVisible(true), 0);
+      return () => clearTimeout(t);
+    }
+    // an observer always reports once right after observe(); if it never does (unusual
+    // embedded browsers, crawlers), show the content instead of leaving it invisible
+    let reported = false;
     const io = new IntersectionObserver(
       ([e]) => {
+        reported = true;
         if (e?.isIntersecting) {
           setVisible(true);
           io.disconnect();
@@ -20,7 +28,11 @@ export function Reveal({ children, delay = 0, as: Tag = "div", className = "" }:
       { rootMargin: "0px 0px -8% 0px" },
     );
     io.observe(el);
-    return () => io.disconnect();
+    const fallback = setTimeout(() => !reported && setVisible(true), 1200);
+    return () => {
+      io.disconnect();
+      clearTimeout(fallback);
+    };
   }, []);
   return (
     <Tag ref={ref} data-visible={visible} className={`reveal ${className}`} style={{ transitionDelay: `${delay}ms` }}>
@@ -41,9 +53,8 @@ export function CountUp({ value, duration = 1200 }: { value: number; duration?: 
       raf = requestAnimationFrame(() => setN(value));
       return () => cancelAnimationFrame(raf);
     }
-    const io = new IntersectionObserver(([e]) => {
-      if (!e?.isIntersecting) return;
-      io.disconnect();
+    let reported = false;
+    const animate = () => {
       const start = performance.now();
       const tick = (t: number) => {
         const p = Math.min(1, (t - start) / duration);
@@ -51,10 +62,20 @@ export function CountUp({ value, duration = 1200 }: { value: number; duration?: 
         if (p < 1) raf = requestAnimationFrame(tick);
       };
       raf = requestAnimationFrame(tick);
+    };
+    const fallback = setTimeout(() => {
+      if (!reported) setN(value);
+    }, 1200);
+    const io = new IntersectionObserver(([e]) => {
+      reported = true;
+      if (!e?.isIntersecting) return;
+      io.disconnect();
+      animate();
     });
     io.observe(el);
     return () => {
       io.disconnect();
+      clearTimeout(fallback);
       cancelAnimationFrame(raf);
     };
   }, [value, duration]);

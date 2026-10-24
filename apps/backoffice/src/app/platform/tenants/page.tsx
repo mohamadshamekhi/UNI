@@ -3,7 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { Badge } from "@uni/shared/ui/badge";
 import { Button } from "@uni/shared/ui/button";
 import { FormDialog } from "@uni/shared/ui/dialog";
@@ -16,14 +17,16 @@ import { fmtDate } from "@uni/shared/format";
 import { MODULES, TENANT_STATUS } from "@uni/shared/labels";
 import type { Tenant } from "@uni/shared/types";
 
-export default function TenantsPage() {
-  const [q, setQ] = useState("");
+function TenantsInner() {
+  const sp = useSearchParams();
+  const [q, setQ] = useState(sp.get("q") ?? "");
   const [creating, setCreating] = useState(false);
   const tenants = useQuery({ queryKey: ["platform-tenants", q], queryFn: () => api<Tenant[]>("/v1/platform/tenants", { query: { q } }) });
 
   return (
     <>
       <PageHeader
+        eyebrow="مدیریت سامانه"
         title="سازمان‌ها"
         description="دانشگاه‌ها و مؤسسات تعریف‌شده در سامانه"
         actions={
@@ -80,6 +83,14 @@ export default function TenantsPage() {
       </QueryView>
       <CreateTenantDialog open={creating} onClose={() => setCreating(false)} />
     </>
+  );
+}
+
+export default function TenantsPage() {
+  return (
+    <Suspense>
+      <TenantsInner />
+    </Suspense>
   );
 }
 

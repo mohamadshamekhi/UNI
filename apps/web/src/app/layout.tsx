@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Vazirmatn } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
-import { themeInitScript } from "@/components/site/theme";
+import { themeInitScript } from "@uni/shared/theme-script";
 
 const vazirmatn = Vazirmatn({ variable: "--font-vazirmatn", subsets: ["arabic", "latin"], display: "swap" });
 

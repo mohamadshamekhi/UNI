@@ -2,6 +2,7 @@
 
 import { Button } from "@uni/shared/ui/button";
 import { Field, Input } from "@uni/shared/ui/field";
+import { SecondFactorForm } from "@uni/shared/ui/second-factor";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -9,12 +10,12 @@ import { Suspense, useState, type FormEvent } from "react";
 import { MobileOtp } from "@/components/otp";
 import { useTenantSlug } from "@/lib/tenant";
 
-async function postLogin(path: string, body: unknown) {
+/** Returns an MFA token when the account has 2FA, otherwise null (session cookies are set). */
+async function postLogin(path: string, body: unknown): Promise<string | null> {
   const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    throw new Error(data?.error?.message ?? "ورود ناموفق بود.");
-  }
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error?.message ?? "ورود ناموفق بود.");
+  return data?.mfaRequired ? (data.mfaToken as string) : null;
 }
 
 function LoginInner() {
@@ -27,6 +28,7 @@ function LoginInner() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
 
   const done = async () => {
     await qc.invalidateQueries({ queryKey: ["me"] });
@@ -39,14 +41,24 @@ function LoginInner() {
     setPending(true);
     setError(null);
     try {
-      await postLogin("/api/auth/login", { identifier, password });
-      await done();
+      const mfa = await postLogin("/api/auth/login", { identifier, password });
+      if (mfa) setMfaToken(mfa);
+      else await done();
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setPending(false);
     }
   };
+
+  if (mfaToken) {
+    return (
+      <div className="mx-auto max-w-sm">
+        <h1 className="mb-6 text-xl font-bold">تأیید دومرحله‌ای</h1>
+        <SecondFactorForm mfaToken={mfaToken} onDone={done} size="lg" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-sm">
@@ -79,8 +91,9 @@ function LoginInner() {
         </form>
       ) : (
         <MobileOtp tenant={slug} purpose="login" submitLabel="ورود" onCode={async (mobile, code) => {
-          await postLogin("/api/auth/login-otp", { mobile, code });
-          await done();
+          const mfa = await postLogin("/api/auth/login-otp", { mobile, code });
+          if (mfa) setMfaToken(mfa);
+          else await done();
         }} />
       )}
       <p className="mt-8 text-center text-sm text-muted-foreground">

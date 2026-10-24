@@ -2,15 +2,10 @@
 
 import { Moon, Sun } from "lucide-react";
 import { useSyncExternalStore } from "react";
+import { THEME_KEY as KEY } from "../theme-script";
 
 export type Theme = "light" | "dark";
-const KEY = "theme";
 
-/**
- * Runs before paint (inlined in <head>) so the chosen theme applies without a flash.
- * Light is the default; only an explicit choice switches to dark.
- */
-export const themeInitScript = `try{var t=localStorage.getItem("${KEY}");document.documentElement.dataset.theme=t==="dark"?"dark":"light"}catch(e){document.documentElement.dataset.theme="light"}`;
 
 const listeners = new Set<() => void>();
 const read = (): Theme => (typeof document !== "undefined" && document.documentElement.dataset.theme === "dark" ? "dark" : "light");

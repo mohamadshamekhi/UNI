@@ -4,7 +4,7 @@ import { clsx } from "clsx";
 import { useId, type ComponentProps, type InputHTMLAttributes, type ReactNode } from "react";
 
 const control =
-  "w-full rounded-md border border-border bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-150 focus:border-primary aria-[invalid=true]:border-danger disabled:opacity-60";
+  "w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground shadow-sm placeholder:text-muted-foreground transition-[border-color,box-shadow] duration-150 hover:border-[color-mix(in_oklab,var(--primary)_30%,var(--border))] focus:border-primary focus:shadow-[0_0_0_3px_color-mix(in_oklab,var(--primary)_18%,transparent)] focus:outline-none aria-[invalid=true]:border-danger disabled:opacity-60";
 
 interface FieldProps {
   label: string;

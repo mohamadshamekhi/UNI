@@ -1,83 +1,166 @@
 "use client";
 
 import { setUnauthorizedHandler } from "@uni/shared/api";
+import { Logo } from "@uni/shared/ui/logo";
 import { ErrorState, Loading } from "@uni/shared/ui/states";
-import { ChevronLeft, Landmark } from "lucide-react";
+import { ThemeToggle } from "@uni/shared/ui/theme";
+import { ChevronLeft, LogIn, LogOut, Menu, UserRound, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, type CSSProperties, type ReactNode } from "react";
-import { ThemeToggle } from "@/components/site/theme";
-import { usePublicTenant, useSession, useTenantSlug } from "@/lib/tenant";
+import { usePathname } from "next/navigation";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { CONTAINER, TenantMark } from "@/components/site/tenant-mark";
+import { usePublicTenant, useSession, useTenantSlug, type PublicTenant } from "@/lib/tenant";
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
 export default function TenantLayout({ children }: { children: ReactNode }) {
   const slug = useTenantSlug();
+  const pathname = usePathname();
   const tenant = usePublicTenant(slug);
-  const session = useSession();
 
   useEffect(() => {
     setUnauthorizedHandler(() => window.location.assign(`/${slug}/login?next=${encodeURIComponent(window.location.pathname)}`));
   }, [slug]);
 
-  // UX-10: tenant brand colour without code changes
-  const color = tenant.data?.branding.primaryColor;
-  const style = color && HEX.test(color) ? ({ "--primary": color, "--primary-hover": color, "--ring": color } as CSSProperties) : undefined;
-
-  if (tenant.isPending) return <main id="main" className="mx-auto max-w-xl px-4 py-12"><Loading /></main>;
+  if (tenant.isPending) {
+    return (
+      <main id="main" className={`${CONTAINER} py-24`}>
+        <Loading />
+      </main>
+    );
+  }
   if (tenant.error) {
     return (
-      <main id="main" className="mx-auto max-w-xl px-4 py-12">
+      <main id="main" className={`${CONTAINER} max-w-xl py-24`}>
         <ErrorState error={tenant.error} />
         <Link href="/" className="mt-4 inline-block text-primary underline">انتخاب دانشگاه دیگر</Link>
       </main>
     );
   }
-  const name = tenant.data.branding.displayName || tenant.data.nameFa;
+
+  // UX-10: tenant brand colour without code changes
+  const color = tenant.data.branding.primaryColor;
+  const style = color && HEX.test(color) ? ({ "--primary": color, "--primary-hover": color, "--ring": color } as CSSProperties) : undefined;
+  const landing = pathname === `/${slug}`;
+
   return (
     <div style={style} className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
-          <Link href={`/${slug}`} className="flex min-w-0 items-center gap-2.5 font-bold">
-            <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary">
-              <Landmark className="size-5" strokeWidth={1.75} />
-            </span>
-            <span className="truncate">{name}</span>
-          </Link>
-          <nav aria-label="حساب کاربری" className="flex items-center gap-1 text-sm">
-            <ThemeToggle className="hover:bg-muted" />
-            {session.data ? (
-              <>
-                <Link href={`/${slug}/me`} className="rounded-md px-3 py-2 hover:bg-muted">وضعیت من</Link>
-                <button
-                  type="button"
-                  className="cursor-pointer rounded-md px-3 py-2 text-danger hover:bg-danger-bg"
-                  onClick={async () => {
-                    await fetch("/api/auth/logout", { method: "POST" });
-                    window.location.assign(`/${slug}`);
-                  }}
-                >
-                  خروج
-                </button>
-              </>
-            ) : (
-              <>
-                <Link href={`/${slug}/login`} className="rounded-md px-3 py-2 hover:bg-muted">ورود</Link>
-                <Link href={`/${slug}/register`} className="hidden h-10 items-center rounded-full bg-primary px-5 font-semibold text-on-primary hover:bg-primary-hover sm:inline-flex">ثبت‌نام</Link>
-              </>
-            )}
-          </nav>
-        </div>
-      </header>
-      <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">{children}</main>
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-6 text-sm text-muted-foreground sm:px-6">
-          <span>{name}</span>
-          <Link href="/" className="inline-flex items-center gap-1 hover:text-foreground">
-            همه دانشگاه‌ها
-            <ChevronLeft aria-hidden className="size-4" />
-          </Link>
+      <TenantHeader slug={slug} tenant={tenant.data} overHero={landing} />
+      {/* the landing page draws its own full-bleed hero; inner pages share the site container */}
+      <main id="main" className={landing ? "flex-1" : `${CONTAINER} flex-1 pt-28 pb-16`}>
+        {children}
+      </main>
+      <footer className="border-t border-border bg-card">
+        <div className={`${CONTAINER} flex flex-wrap items-center justify-between gap-4 py-8 text-sm`}>
+          <div className="flex items-center gap-2.5">
+            <TenantMark slug={slug} tenant={tenant.data} size="sm" />
+            <span className="font-semibold">{tenant.data.branding.displayName || tenant.data.nameFa}</span>
+          </div>
+          <div className="flex items-center gap-5 text-muted-foreground">
+            <Link href="/terms" className="hover:text-foreground">شرایط و حریم خصوصی</Link>
+            <Link href="/" className="inline-flex items-center gap-1 hover:text-foreground">
+              همه دانشگاه‌ها
+              <ChevronLeft aria-hidden className="size-4" />
+            </Link>
+          </div>
         </div>
       </footer>
     </div>
+  );
+}
+
+/** Mirrors the platform site header: transparent over the hero, frosted once scrolled. */
+function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: PublicTenant; overHero: boolean }) {
+  const session = useSession();
+  const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  const solid = !overHero || scrolled || open;
+  const name = tenant.branding.displayName || tenant.nameFa;
+  const link = solid ? "text-muted-foreground hover:text-foreground" : "text-white/75 hover:text-white";
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.assign(`/${slug}`);
+  };
+
+  return (
+    <header
+      className={`fixed inset-x-0 top-0 z-50 transition-[background-color,border-color,color] duration-300 ${
+        solid ? "border-b border-border/70 bg-background/85 text-foreground backdrop-blur-xl" : "border-b border-transparent text-white"
+      }`}
+    >
+      <div className={`${CONTAINER} flex h-16 items-center gap-4`}>
+        <Link href={`/${slug}`} className="flex min-w-0 items-center gap-2.5 font-bold">
+          <TenantMark slug={slug} tenant={tenant} />
+          <span className="truncate">{name}</span>
+        </Link>
+        <nav aria-label="حساب کاربری" className="ms-auto hidden items-center gap-1 md:flex">
+          <Link href="/" className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
+            <Logo className="size-5" />
+            همه دانشگاه‌ها
+          </Link>
+          <ThemeToggle className={solid ? "hover:bg-muted" : "hover:bg-white/10"} />
+          {session.data ? (
+            <>
+              <Link href={`/${slug}/me`} className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
+                <UserRound aria-hidden className="size-4" />
+                وضعیت من
+              </Link>
+              <button type="button" onClick={logout} className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${solid ? "text-danger hover:bg-danger-bg" : "text-white/75 hover:text-white"}`}>
+                <LogOut aria-hidden className="size-4" />
+                خروج
+              </button>
+            </>
+          ) : (
+            <>
+              <Link href={`/${slug}/login`} className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
+                <LogIn aria-hidden className="size-4" />
+                ورود
+              </Link>
+              <Link
+                href={`/${slug}/register`}
+                className={`ms-1 inline-flex h-10 items-center rounded-full px-5 text-sm font-semibold transition-colors ${solid ? "bg-primary text-on-primary hover:bg-primary-hover" : "bg-white text-[#0b1f52] hover:bg-white/90"}`}
+              >
+                ثبت‌نام
+              </Link>
+            </>
+          )}
+        </nav>
+        <div className="ms-auto flex items-center gap-1 md:hidden">
+          <ThemeToggle className={solid ? "hover:bg-muted" : "hover:bg-white/10"} />
+          <button
+            type="button"
+            aria-label={open ? "بستن منو" : "باز کردن منو"}
+            aria-expanded={open}
+            aria-controls="tenant-nav"
+            onClick={() => setOpen((v) => !v)}
+            className={`flex size-11 cursor-pointer items-center justify-center rounded-full ${solid ? "hover:bg-muted" : "hover:bg-white/10"}`}
+          >
+            {open ? <X aria-hidden className="size-5" /> : <Menu aria-hidden className="size-5" />}
+          </button>
+        </div>
+      </div>
+      {open && (
+        <nav id="tenant-nav" aria-label="حساب کاربری" className={`${CONTAINER} border-t border-border pb-4 md:hidden`}>
+          {session.data ? (
+            <>
+              <Link href={`/${slug}/me`} onClick={() => setOpen(false)} className="block px-2 py-3">وضعیت من</Link>
+              <button type="button" onClick={logout} className="block w-full cursor-pointer px-2 py-3 text-start text-danger">خروج</button>
+            </>
+          ) : (
+            <>
+              <Link href={`/${slug}/login`} onClick={() => setOpen(false)} className="block px-2 py-3">ورود</Link>
+              <Link href={`/${slug}/register`} onClick={() => setOpen(false)} className="mt-2 flex h-11 items-center justify-center rounded-full bg-primary font-semibold text-on-primary">ثبت‌نام</Link>
+            </>
+          )}
+          <Link href="/" onClick={() => setOpen(false)} className="block px-2 py-3 text-muted-foreground">همه دانشگاه‌ها</Link>
+        </nav>
+      )}
+    </header>
   );
 }

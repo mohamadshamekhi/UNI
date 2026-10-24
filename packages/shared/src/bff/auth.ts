@@ -17,6 +17,8 @@ export function loginHandler(apiPath: string) {
     });
     const data = await res.json();
     if (!res.ok) return NextResponse.json(data, { status: res.status });
+    // accounts with 2FA: no tokens yet, the client continues at /api/auth/login-2fa
+    if (data?.mfaRequired) return NextResponse.json({ mfaRequired: true, mfaToken: data.mfaToken });
     const out = NextResponse.json({ ok: true });
     setSessionCookies(out, data as TokenPair);
     return out;

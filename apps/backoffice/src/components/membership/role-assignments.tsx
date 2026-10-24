@@ -5,7 +5,8 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@uni/shared/ui/button";
 import { FormDialog, ReasonDialog } from "@uni/shared/ui/dialog";
-import { Field, Input, Select } from "@uni/shared/ui/field";
+import { Field, Select } from "@uni/shared/ui/field";
+import { JalaliDateInput } from "@uni/shared/ui/jalali-date-input";
 import { Card } from "@uni/shared/ui/layout";
 import { Badge } from "@uni/shared/ui/badge";
 import { useToast } from "@uni/shared/ui/toast";
@@ -140,7 +141,7 @@ function AssignDialog({ open, onClose, membershipId, onDone }: { open: boolean; 
         </Field>
       )}
       <Field label="اعتبار تا (اختیاری)" hint="برای نقش موقت، مثلاً داور مهمان یا تفویض.">
-        {(p) => <Input {...p} type="date" dir="ltr" value={validTo} onChange={(e) => setValidTo(e.target.value)} />}
+        {(p) => <JalaliDateInput id={p.id} aria-describedby={p["aria-describedby"]} value={validTo} onChange={setValidTo} min={new Date().toISOString().slice(0, 10)} />}
       </Field>
     </FormDialog>
   );

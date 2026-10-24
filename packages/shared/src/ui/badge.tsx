@@ -12,5 +12,10 @@ const tones: Record<Tone, string> = {
 
 /** Status is always written out in text; colour is only a secondary cue. */
 export function Badge({ tone = "neutral", children }: { tone?: Tone; children: ReactNode }) {
-  return <span className={clsx("inline-flex items-center rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap", tones[tone])}>{children}</span>;
+  return (
+    <span className={clsx("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap", tones[tone])}>
+      <span aria-hidden className="size-1.5 rounded-full bg-current opacity-70" />
+      {children}
+    </span>
+  );
 }

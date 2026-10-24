@@ -7,7 +7,7 @@ export interface UniversityItem {
   slug: string;
   nameFa: string;
   nameEn: string | null;
-  branding?: { primaryColor?: string; displayName?: string } | null;
+  branding?: { primaryColor?: string; displayName?: string; logoFileId?: string } | null;
 }
 
 /** Card tinted by the university's own colour: icon tile, top light and hover glow. */
@@ -21,13 +21,20 @@ export function UniversityCard({ u }: { u: UniversityItem }) {
       <span aria-hidden className="pointer-events-none absolute -top-24 -end-24 size-48 rounded-full opacity-[0.08] blur-2xl transition-opacity duration-300 group-hover:opacity-20" style={{ background: color }} />
       <span aria-hidden className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)` }} />
       <div className="relative flex items-start gap-4">
-        <span
-          aria-hidden
-          className="flex size-14 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg transition-transform duration-300 group-hover:scale-105"
-          style={{ background: `linear-gradient(135deg, ${color}, color-mix(in oklab, ${color} 70%, black))`, boxShadow: `0 10px 24px -10px ${color}` }}
-        >
-          <Landmark className="size-7" strokeWidth={1.6} />
-        </span>
+        {u.branding?.logoFileId ? (
+          <span aria-hidden className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-white p-1.5 transition-transform duration-300 group-hover:scale-105" style={{ boxShadow: `0 10px 24px -12px ${color}` }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/proxy/v1/public/tenants/${u.slug}/logo?v=${u.branding.logoFileId}`} alt="" className="max-h-full max-w-full object-contain" loading="lazy" />
+          </span>
+        ) : (
+          <span
+            aria-hidden
+            className="flex size-14 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg transition-transform duration-300 group-hover:scale-105"
+            style={{ background: `linear-gradient(135deg, ${color}, color-mix(in oklab, ${color} 70%, black))`, boxShadow: `0 10px 24px -10px ${color}` }}
+          >
+            <Landmark className="size-7" strokeWidth={1.6} />
+          </span>
+        )}
         <div className="min-w-0 flex-1 pt-0.5">
           <h3 className="text-lg leading-7 font-bold text-balance">
             <Link href={`/${u.slug}`} className="after:absolute after:inset-0 after:rounded-3xl focus:outline-none">

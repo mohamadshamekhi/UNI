@@ -84,7 +84,7 @@ export function AuditLog({ basePath, tenant, extraQuery }: { basePath: string; t
                     <Td>
                       <code dir="ltr" className="text-xs">{r.action}</code>
                     </Td>
-                    <Td className="text-xs">{r.actorType === "system" ? "سیستم" : <code dir="ltr">{shortId(r.actorUserId)}</code>}</Td>
+                    <Td className="text-xs">{r.actorType === "system" ? "سیستم" : (r.actorName ?? <code dir="ltr">{shortId(r.actorUserId)}</code>)}</Td>
                     <Td className="text-xs">
                       {r.targetType ? (
                         <span dir="ltr">
