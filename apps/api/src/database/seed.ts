@@ -15,7 +15,7 @@ try {
   const { rows } = await client.query<{ id: string }>(
     `INSERT INTO users (mobile, full_name, password_hash, mobile_verified_at)
      VALUES ($1, 'مدیر کل سامانه', $2, now())
-     ON CONFLICT (mobile) DO UPDATE SET updated_at = now() RETURNING id`,
+     ON CONFLICT (mobile) DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = now() RETURNING id`,
     [mobile, passwordHash],
   );
   await client.query('INSERT INTO platform_admins (user_id) VALUES ($1) ON CONFLICT DO NOTHING', [rows[0]!.id]);
