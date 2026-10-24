@@ -48,12 +48,17 @@ ClamAV is behind a compose profile (`docker compose --profile scan up -d clamav`
 - **Files**: private MinIO bucket, content sniffing, quota, async ClamAV scan, single-use 60 s
   download links, confidential views audited.
 - **Outbox**: events written in the business transaction, dispatched by a poller (phase-1 SMS only).
+- **2FA (AUTH-12)**: optional TOTP with 8 one-time recovery codes; secrets AES-GCM encrypted with `DATA_ENC_KEY`.
+- **Bulk import (AUTH-16)**: CSV/XLSX, dry-run preview, each row in its own savepoint.
+- **Maintenance (FIL-09, OD-08)**: hourly job (advisory-locked) expires identity documents per tenant
+  retention policy, purges storage after 7 days, cleans OTPs, old sessions and dispatched outbox rows.
+  Audit rows are never deleted.
 - Error body is always `{ error: { code, message, details? }, requestId }`; codes in
   `src/common/errors/app-error.ts`.
 
 ## Phase 1 — not done yet
 
-- Frontend `apps/web` (student / faculty / public registration).
-- Backoffice: Jalali date picker (role validity uses a native date input), actor names in audit (API returns ids).
-- AUTH-16 bulk Excel import, AUTH-12 2FA for admins, FIL-09 retention jobs, AUD-07 retention.
-- Real SMS provider adapter (only console/memory now) and signed tenant header behind a BFF.
+- Real SMS provider adapter (only console/memory now; needs the university's provider).
+- CI/CD, Dockerfiles, backups and monitoring (scheduled for the end of phase 1).
+- Handover docs: user guide, admin guide, deployment guide (API docs at `/docs`).
+- 2FA is optional (platform admins get a banner); enforcing it for platform admins is a policy switch still to decide.
