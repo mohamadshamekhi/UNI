@@ -5,7 +5,7 @@ Multi-tenant university process platform (spec: `docs/spec/scenario-v0.2.txt`, S
 ```
 apps/api         NestJS 12 + Drizzle + PostgreSQL RLS  (phase 1 core: done)
 apps/web         Next.js — student / faculty / reviewer / public  (todo)
-apps/backoffice  Next.js — platform admin + university admin     (todo)
+apps/backoffice  Next.js 16 — platform admin + university admin  (phase 1: done)
 packages/*       shared UI, API client generated from OpenAPI    (todo)
 ```
 
@@ -19,7 +19,12 @@ pnpm --filter @uni/api db:migrate
 pnpm --filter @uni/api db:seed         # platform admin from SEED_PLATFORM_ADMIN_*
 pnpm --filter @uni/api dev             # http://localhost:4000, OpenAPI at /docs
 pnpm --filter @uni/api test            # uses database uni_test, Redis db 15
+cp apps/backoffice/.env.example apps/backoffice/.env.local
+pnpm --filter @uni/backoffice dev      # http://localhost:3001
 ```
+
+The backoffice is a BFF: the browser only calls `/api/*` on Next; access/refresh tokens live in
+httpOnly cookies and `/api/proxy/v1/*` forwards to the API (refreshing once on 401).
 
 ClamAV is behind a compose profile (`docker compose --profile scan up -d clamav`, then
 `FILE_SCAN_MODE=clamav`). Production refuses `FILE_SCAN_MODE=skip`.
@@ -48,6 +53,7 @@ ClamAV is behind a compose profile (`docker compose --profile scan up -d clamav`
 
 ## Phase 1 — not done yet
 
-- Frontends: `apps/backoffice`, `apps/web` (RTL, Jalali, WCAG AA).
+- Frontend `apps/web` (student / faculty / public registration).
+- Backoffice: Jalali date picker (role validity uses a native date input), actor names in audit (API returns ids).
 - AUTH-16 bulk Excel import, AUTH-12 2FA for admins, FIL-09 retention jobs, AUD-07 retention.
 - Real SMS provider adapter (only console/memory now) and signed tenant header behind a BFF.

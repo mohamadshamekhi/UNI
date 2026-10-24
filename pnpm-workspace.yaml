@@ -2,12 +2,9 @@ packages:
   - "apps/*"
   - "packages/*"
 allowBuilds:
-  '@scarf/scarf': set this to true or false
-  '@swc/core': set this to true or false
-  esbuild: set this to true or false
-  msgpackr-extract: set this to true or false
-onlyBuiltDependencies:
-  - "@swc/core"
-  - esbuild
-  - msgpackr-extract
-  - "@scarf/scarf"
+  "@swc/core": true
+  esbuild: true
+  msgpackr-extract: true
+  "@scarf/scarf": false
+  sharp: false
+  unrs-resolver: false

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@uni/api", "start"],
+      "port": 4000
+    },
+    {
+      "name": "backoffice",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@uni/backoffice", "dev"],
+      "port": 3001
+    }
+  ]
+}
