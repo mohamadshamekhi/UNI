@@ -1,0 +1,37 @@
+name: uni
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: uni_owner
+      POSTGRES_PASSWORD: uni_owner_dev
+      POSTGRES_DB: uni
+    ports: ["55432:5432"]
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uni_owner -d uni"]
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports: ["56379:6379"]
+  minio:
+    image: docker.arvancloud.ir/minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: uni_minio
+      MINIO_ROOT_PASSWORD: uni_minio_dev
+    ports: ["59000:9000", "59001:9001"]
+    volumes: [minio-data:/data]
+  clamav:
+    image: clamav/clamav:stable
+    ports: ["53310:3310"]
+    profiles: ["scan"]
+  mailpit:
+    image: axllent/mailpit:v1.24
+    ports: ["51025:1025", "58025:8025"]
+volumes:
+  pg-data:
+  minio-data:

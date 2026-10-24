@@ -1,0 +1,63 @@
+import { HttpStatus } from '@nestjs/common';
+
+/**
+ * Stable error codes exposed to clients. Frontends switch on `code`, never on message text.
+ */
+export const ErrorCodes = {
+  VALIDATION_FAILED: [HttpStatus.BAD_REQUEST, 'اطلاعات ارسال‌شده معتبر نیست.'],
+  UNAUTHENTICATED: [HttpStatus.UNAUTHORIZED, 'برای ادامه وارد حساب کاربری شوید.'],
+  SESSION_EXPIRED: [HttpStatus.UNAUTHORIZED, 'نشست شما منقضی شده است؛ دوباره وارد شوید.'],
+  FORBIDDEN: [HttpStatus.FORBIDDEN, 'اجازه انجام این عملیات را ندارید.'],
+  NOT_FOUND: [HttpStatus.NOT_FOUND, 'مورد درخواستی پیدا نشد.'],
+  CONFLICT: [HttpStatus.CONFLICT, 'این عملیات با وضعیت فعلی سازگار نیست.'],
+  RATE_LIMITED: [HttpStatus.TOO_MANY_REQUESTS, 'تعداد درخواست‌ها بیش از حد مجاز است؛ کمی بعد تلاش کنید.'],
+
+  TENANT_REQUIRED: [HttpStatus.BAD_REQUEST, 'سازمان مشخص نشده است.'],
+  TENANT_NOT_FOUND: [HttpStatus.NOT_FOUND, 'سازمان پیدا نشد.'],
+  TENANT_UNAVAILABLE: [HttpStatus.FORBIDDEN, 'دسترسی به این سازمان در حال حاضر امکان‌پذیر نیست.'],
+  MEMBERSHIP_REQUIRED: [HttpStatus.FORBIDDEN, 'عضویت فعالی در این سازمان ندارید.'],
+
+  OTP_INVALID: [HttpStatus.BAD_REQUEST, 'کد تأیید نادرست یا منقضی شده است.'],
+  OTP_TOO_MANY_ATTEMPTS: [HttpStatus.TOO_MANY_REQUESTS, 'تعداد تلاش‌ها بیش از حد مجاز است؛ کد جدید دریافت کنید.'],
+  OTP_RESEND_TOO_SOON: [HttpStatus.TOO_MANY_REQUESTS, 'برای دریافت کد جدید کمی صبر کنید.'],
+  PROOF_INVALID: [HttpStatus.BAD_REQUEST, 'تأیید شماره موبایل معتبر نیست؛ دوباره تأیید کنید.'],
+  INVALID_CREDENTIALS: [HttpStatus.UNAUTHORIZED, 'نام کاربری یا رمز عبور نادرست است.'],
+  ACCOUNT_LOCKED: [HttpStatus.LOCKED, 'به دلیل تلاش‌های ناموفق، ورود موقتاً مسدود است.'],
+  ACCOUNT_DISABLED: [HttpStatus.FORBIDDEN, 'حساب کاربری غیرفعال است.'],
+  ACCOUNT_EXISTS: [HttpStatus.CONFLICT, 'برای این اطلاعات قبلاً حساب ساخته شده است؛ وارد شوید و درخواست عضویت ثبت کنید.'],
+  WEAK_PASSWORD: [HttpStatus.BAD_REQUEST, 'رمز عبور با سیاست امنیتی سازمان سازگار نیست.'],
+
+  MEMBERSHIP_EXISTS: [HttpStatus.CONFLICT, 'در این سازمان قبلاً درخواست عضویت ثبت کرده‌اید.'],
+  MEMBER_NO_TAKEN: [HttpStatus.CONFLICT, 'این شماره دانشجویی/پرسنلی در سازمان ثبت شده است.'],
+  INVALID_STATE_TRANSITION: [HttpStatus.CONFLICT, 'این اقدام در وضعیت فعلی پرونده مجاز نیست.'],
+  SEPARATION_OF_DUTIES: [HttpStatus.FORBIDDEN, 'به دلیل تضاد منافع، انجام این اقدام توسط شما مجاز نیست.'],
+  REVISION_DEADLINE_PASSED: [HttpStatus.CONFLICT, 'مهلت اصلاح به پایان رسیده است.'],
+
+  UNIT_INVALID: [HttpStatus.BAD_REQUEST, 'واحد سازمانی انتخاب‌شده معتبر نیست.'],
+  ROLE_PERMISSION_INVALID: [HttpStatus.BAD_REQUEST, 'یکی از مجوزهای انتخاب‌شده معتبر نیست.'],
+  ROLE_READ_ONLY: [HttpStatus.FORBIDDEN, 'این نقش قالب سیستمی است و قابل ویرایش نیست؛ از آن کپی بگیرید.'],
+  SCOPE_INVALID: [HttpStatus.BAD_REQUEST, 'دامنه انتساب نقش معتبر نیست.'],
+
+  FILE_TYPE_NOT_ALLOWED: [HttpStatus.UNSUPPORTED_MEDIA_TYPE, 'نوع فایل مجاز نیست.'],
+  FILE_TOO_LARGE: [HttpStatus.PAYLOAD_TOO_LARGE, 'حجم فایل بیش از حد مجاز است.'],
+  FILE_QUOTA_EXCEEDED: [HttpStatus.INSUFFICIENT_STORAGE, 'فضای ذخیره‌سازی سازمان پر شده است.'],
+  FILE_NOT_READY: [HttpStatus.CONFLICT, 'فایل هنوز بررسی امنیتی نشده یا در قرنطینه است.'],
+  FILE_TOKEN_INVALID: [HttpStatus.FORBIDDEN, 'لینک دانلود نامعتبر یا منقضی شده است.'],
+
+  INTERNAL: [HttpStatus.INTERNAL_SERVER_ERROR, 'خطای داخلی رخ داد؛ لطفاً دوباره تلاش کنید.'],
+} as const satisfies Record<string, readonly [HttpStatus, string]>;
+
+export type ErrorCode = keyof typeof ErrorCodes;
+
+export class AppError extends Error {
+  readonly status: number;
+
+  constructor(
+    readonly code: ErrorCode,
+    readonly details?: Record<string, unknown>,
+    message?: string,
+  ) {
+    super(message ?? ErrorCodes[code][1]);
+    this.status = ErrorCodes[code][0];
+  }
+}
