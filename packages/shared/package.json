@@ -1,0 +1,29 @@
+{
+  "name": "@uni/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./ui/*": "./src/ui/*.tsx",
+    "./bff/*": "./src/bff/*.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "clsx": "^2",
+    "lucide-react": "*",
+    "next": "^16",
+    "react": "^19"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/node": "^20",
+    "typescript": "^5",
+    "react": "19.3.0",
+    "next": "16.4.2",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.61.0"
+  }
+}

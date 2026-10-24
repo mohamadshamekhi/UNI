@@ -3,17 +3,17 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { FormDialog, ReasonDialog } from "@/components/ui/dialog";
-import { Field, Input, Select } from "@/components/ui/field";
-import { Card } from "@/components/ui/layout";
-import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/components/ui/toast";
-import { api } from "@/lib/api";
-import { fmtDate } from "@/lib/format";
+import { Button } from "@uni/shared/ui/button";
+import { FormDialog, ReasonDialog } from "@uni/shared/ui/dialog";
+import { Field, Input, Select } from "@uni/shared/ui/field";
+import { Card } from "@uni/shared/ui/layout";
+import { Badge } from "@uni/shared/ui/badge";
+import { useToast } from "@uni/shared/ui/toast";
+import { api } from "@uni/shared/api";
+import { fmtDate } from "@uni/shared/format";
 import { useSlug, useUnits } from "@/lib/hooks";
-import { SCOPE_TYPE } from "@/lib/labels";
-import type { Assignment, Role, ScopeType } from "@/lib/types";
+import { SCOPE_TYPE } from "@uni/shared/labels";
+import type { Assignment, Role, ScopeType } from "@uni/shared/types";
 
 /** Role + scope + validity window per membership (section 5, «انتساب»). */
 export function RoleAssignments({ membershipId }: { membershipId: string }) {

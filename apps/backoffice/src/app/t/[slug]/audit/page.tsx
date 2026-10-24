@@ -1,7 +1,7 @@
 "use client";
 
 import { AuditLog } from "@/components/audit-log";
-import { PageHeader } from "@/components/ui/layout";
+import { PageHeader } from "@uni/shared/ui/layout";
 import { useSlug } from "@/lib/hooks";
 
 export default function TenantAuditPage() {

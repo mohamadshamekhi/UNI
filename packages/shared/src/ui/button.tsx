@@ -15,7 +15,8 @@ const variants: Record<Variant, string> = {
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
-  size?: "sm" | "md";
+  /** lg = 44px touch target for mobile-first public pages */
+  size?: "sm" | "md" | "lg";
   loading?: boolean;
 }
 
@@ -27,7 +28,7 @@ export function Button({ variant = "primary", size = "md", loading, disabled, cl
       aria-busy={loading || undefined}
       className={clsx(
         "inline-flex cursor-pointer items-center justify-center gap-2 rounded-md font-medium whitespace-nowrap transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60",
-        size === "sm" ? "h-8 px-3 text-sm" : "h-10 px-4 text-sm",
+        size === "sm" ? "h-8 px-3 text-sm" : size === "lg" ? "h-11 px-5 text-base" : "h-10 px-4 text-sm",
         variants[variant],
         className,
       )}

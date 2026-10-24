@@ -2,10 +2,10 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { FormDialog } from "@/components/ui/dialog";
-import { Field, Input, Select } from "@/components/ui/field";
-import { useToast } from "@/components/ui/toast";
-import { api } from "@/lib/api";
+import { FormDialog } from "@uni/shared/ui/dialog";
+import { Field, Input, Select } from "@uni/shared/ui/field";
+import { useToast } from "@uni/shared/ui/toast";
+import { api } from "@uni/shared/api";
 import { useSlug, useUnits } from "@/lib/hooks";
 
 const EMPTY = { kind: "faculty", fullName: "", mobile: "", email: "", unitId: "", memberNo: "" };

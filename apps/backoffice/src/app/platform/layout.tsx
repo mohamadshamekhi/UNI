@@ -3,7 +3,7 @@
 import { Building2, ScrollText } from "lucide-react";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/shell/app-shell";
-import { ErrorState, Loading } from "@/components/ui/states";
+import { ErrorState, Loading } from "@uni/shared/ui/states";
 import { useMe } from "@/lib/hooks";
 
 const NAV = [

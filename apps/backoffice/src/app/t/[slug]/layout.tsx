@@ -4,8 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Building, LayoutDashboard, ScrollText, Settings, ShieldCheck, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { AppShell, type NavItem } from "@/components/shell/app-shell";
-import { ErrorState, Loading } from "@/components/ui/states";
-import { api } from "@/lib/api";
+import { ErrorState, Loading } from "@uni/shared/ui/states";
+import { api } from "@uni/shared/api";
 import { usePermissions, useSlug } from "@/lib/hooks";
 
 interface PublicTenant {

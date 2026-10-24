@@ -2,7 +2,7 @@
 
 import { AlertTriangle, Inbox } from "lucide-react";
 import type { ReactNode } from "react";
-import { errorMessage } from "@/lib/api";
+import { errorMessage } from "../api";
 import { Button } from "./button";
 
 export function Loading({ rows = 4, label = "در حال بارگذاری" }: { rows?: number; label?: string }) {

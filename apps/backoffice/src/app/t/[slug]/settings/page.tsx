@@ -2,14 +2,14 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Field, Input, Select } from "@/components/ui/field";
-import { Card, PageHeader } from "@/components/ui/layout";
-import { QueryView } from "@/components/ui/states";
-import { useToast } from "@/components/ui/toast";
-import { api, errorMessage } from "@/lib/api";
+import { Button } from "@uni/shared/ui/button";
+import { Field, Input, Select } from "@uni/shared/ui/field";
+import { Card, PageHeader } from "@uni/shared/ui/layout";
+import { QueryView } from "@uni/shared/ui/states";
+import { useToast } from "@uni/shared/ui/toast";
+import { api, errorMessage } from "@uni/shared/api";
 import { useSlug } from "@/lib/hooks";
-import type { Tenant, TenantSettings } from "@/lib/types";
+import type { Tenant, TenantSettings } from "@uni/shared/types";
 
 export default function SettingsPage() {
   const slug = useSlug();

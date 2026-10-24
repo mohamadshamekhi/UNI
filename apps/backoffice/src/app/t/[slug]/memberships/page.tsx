@@ -6,16 +6,16 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { InviteDialog } from "@/components/membership/invite-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Field, Input, Select } from "@/components/ui/field";
-import { PageHeader, Table, Td, Th } from "@/components/ui/layout";
-import { EmptyState, QueryView } from "@/components/ui/states";
-import { api } from "@/lib/api";
-import { fmtDate, fmtNum } from "@/lib/format";
+import { Badge } from "@uni/shared/ui/badge";
+import { Button } from "@uni/shared/ui/button";
+import { Field, Input, Select } from "@uni/shared/ui/field";
+import { PageHeader, Table, Td, Th } from "@uni/shared/ui/layout";
+import { EmptyState, QueryView } from "@uni/shared/ui/states";
+import { api } from "@uni/shared/api";
+import { fmtDate, fmtNum } from "@uni/shared/format";
 import { useCan, useSlug, useUnits } from "@/lib/hooks";
-import { MEMBERSHIP_KIND, MEMBERSHIP_STATUS } from "@/lib/labels";
-import type { MembershipRow } from "@/lib/types";
+import { MEMBERSHIP_KIND, MEMBERSHIP_STATUS } from "@uni/shared/labels";
+import type { MembershipRow } from "@uni/shared/types";
 
 const PAGE = 25;
 

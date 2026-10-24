@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { errorMessage } from "@/lib/api";
+import { errorMessage } from "../api";
 import { Button } from "./button";
 import { Field, Textarea } from "./field";
 

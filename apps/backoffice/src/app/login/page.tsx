@@ -2,8 +2,8 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
-import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/field";
+import { Button } from "@uni/shared/ui/button";
+import { Field, Input } from "@uni/shared/ui/field";
 
 function LoginForm() {
   const router = useRouter();

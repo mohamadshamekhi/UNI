@@ -2,11 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { Card, PageHeader } from "@/components/ui/layout";
-import { api } from "@/lib/api";
-import { fmtNum } from "@/lib/format";
+import { Card, PageHeader } from "@uni/shared/ui/layout";
+import { api } from "@uni/shared/api";
+import { fmtNum } from "@uni/shared/format";
 import { useCan, useSlug } from "@/lib/hooks";
-import type { MembershipStatus } from "@/lib/types";
+import type { MembershipStatus } from "@uni/shared/types";
 
 function useCount(slug: string, status: MembershipStatus, enabled: boolean) {
   return useQuery({

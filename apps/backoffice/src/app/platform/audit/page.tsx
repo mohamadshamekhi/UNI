@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { AuditLog } from "@/components/audit-log";
-import { Field, Input } from "@/components/ui/field";
-import { PageHeader } from "@/components/ui/layout";
+import { Field, Input } from "@uni/shared/ui/field";
+import { PageHeader } from "@uni/shared/ui/layout";
 
 export default function PlatformAuditPage() {
   const [tenantId, setTenantId] = useState("");

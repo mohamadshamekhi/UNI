@@ -4,17 +4,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { FormDialog } from "@/components/ui/dialog";
-import { Field, Input } from "@/components/ui/field";
-import { PageHeader, Table, Td, Th } from "@/components/ui/layout";
-import { EmptyState, QueryView } from "@/components/ui/states";
-import { useToast } from "@/components/ui/toast";
-import { api } from "@/lib/api";
-import { fmtDate } from "@/lib/format";
-import { MODULES, TENANT_STATUS } from "@/lib/labels";
-import type { Tenant } from "@/lib/types";
+import { Badge } from "@uni/shared/ui/badge";
+import { Button } from "@uni/shared/ui/button";
+import { FormDialog } from "@uni/shared/ui/dialog";
+import { Field, Input } from "@uni/shared/ui/field";
+import { PageHeader, Table, Td, Th } from "@uni/shared/ui/layout";
+import { EmptyState, QueryView } from "@uni/shared/ui/states";
+import { useToast } from "@uni/shared/ui/toast";
+import { api } from "@uni/shared/api";
+import { fmtDate } from "@uni/shared/format";
+import { MODULES, TENANT_STATUS } from "@uni/shared/labels";
+import type { Tenant } from "@uni/shared/types";
 
 export default function TenantsPage() {
   const [q, setQ] = useState("");

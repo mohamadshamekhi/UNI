@@ -5,17 +5,17 @@ import { ArrowRight, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { FormDialog, ReasonDialog } from "@/components/ui/dialog";
-import { Checkbox, Field, Input } from "@/components/ui/field";
-import { Card, Dl, PageHeader } from "@/components/ui/layout";
-import { QueryView } from "@/components/ui/states";
-import { useToast } from "@/components/ui/toast";
-import { api, errorMessage } from "@/lib/api";
-import { fmtBytes, fmtDateTime } from "@/lib/format";
-import { MODULES, TENANT_STATUS } from "@/lib/labels";
-import type { Tenant, TenantStatus } from "@/lib/types";
+import { Badge } from "@uni/shared/ui/badge";
+import { Button } from "@uni/shared/ui/button";
+import { FormDialog, ReasonDialog } from "@uni/shared/ui/dialog";
+import { Checkbox, Field, Input } from "@uni/shared/ui/field";
+import { Card, Dl, PageHeader } from "@uni/shared/ui/layout";
+import { QueryView } from "@uni/shared/ui/states";
+import { useToast } from "@uni/shared/ui/toast";
+import { api, errorMessage } from "@uni/shared/api";
+import { fmtBytes, fmtDateTime } from "@uni/shared/format";
+import { MODULES, TENANT_STATUS } from "@uni/shared/labels";
+import type { Tenant, TenantStatus } from "@uni/shared/types";
 
 const NEXT_STATUS: Record<TenantStatus, { to: TenantStatus; label: string; danger: boolean }[]> = {
   draft: [

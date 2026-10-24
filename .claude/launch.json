@@ -4,14 +4,32 @@
     {
       "name": "api",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@uni/api", "start"],
+      "runtimeArgs": [
+        "--filter",
+        "@uni/api",
+        "start"
+      ],
       "port": 4000
     },
     {
       "name": "backoffice",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@uni/backoffice", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@uni/backoffice",
+        "dev"
+      ],
       "port": 3001
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@uni/web",
+        "dev"
+      ],
+      "port": 3000
     }
   ]
 }

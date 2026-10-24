@@ -3,16 +3,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { ShieldAlert, ShieldCheck } from "lucide-react";
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Field, Input } from "@/components/ui/field";
-import { Table, Td, Th } from "@/components/ui/layout";
-import { EmptyState, QueryView } from "@/components/ui/states";
-import { api } from "@/lib/api";
-import { fmtDateTime, shortId } from "@/lib/format";
-import { AUDIT_RESULT } from "@/lib/labels";
-import type { AuditRow } from "@/lib/types";
+import { Badge } from "@uni/shared/ui/badge";
+import { Button } from "@uni/shared/ui/button";
+import { Dialog } from "@uni/shared/ui/dialog";
+import { Field, Input } from "@uni/shared/ui/field";
+import { Table, Td, Th } from "@uni/shared/ui/layout";
+import { EmptyState, QueryView } from "@uni/shared/ui/states";
+import { api } from "@uni/shared/api";
+import { fmtDateTime, shortId } from "@uni/shared/format";
+import { AUDIT_RESULT } from "@uni/shared/labels";
+import type { AuditRow } from "@uni/shared/types";
 
 const PAGE = 50;
 

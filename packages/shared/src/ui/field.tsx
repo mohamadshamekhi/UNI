@@ -1,7 +1,7 @@
 "use client";
 
 import { clsx } from "clsx";
-import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { useId, type ComponentProps, type InputHTMLAttributes, type ReactNode } from "react";
 
 const control =
   "w-full rounded-md border border-border bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-150 focus:border-primary aria-[invalid=true]:border-danger disabled:opacity-60";
@@ -41,11 +41,11 @@ export function Field({ label, hint, error, required, children, className }: Fie
   );
 }
 
-export const Input = ({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) => <input className={clsx(control, "h-10", className)} {...p} />;
+export const Input = ({ className, ...p }: ComponentProps<"input">) => <input className={clsx(control, "h-10", className)} {...p} />;
 
-export const Select = ({ className, ...p }: SelectHTMLAttributes<HTMLSelectElement>) => <select className={clsx(control, "h-10", className)} {...p} />;
+export const Select = ({ className, ...p }: ComponentProps<"select">) => <select className={clsx(control, "h-10", className)} {...p} />;
 
-export const Textarea = ({ className, ...p }: TextareaHTMLAttributes<HTMLTextAreaElement>) => (
+export const Textarea = ({ className, ...p }: ComponentProps<"textarea">) => (
   <textarea className={clsx(control, "min-h-24 py-2", className)} {...p} />
 );
 

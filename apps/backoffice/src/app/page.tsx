@@ -3,12 +3,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Building2, ChevronLeft, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
-import { QueryView } from "@/components/ui/states";
-import { api } from "@/lib/api";
+import { Badge } from "@uni/shared/ui/badge";
+import { QueryView } from "@uni/shared/ui/states";
+import { api } from "@uni/shared/api";
 import { useMe } from "@/lib/hooks";
-import { MEMBERSHIP_STATUS } from "@/lib/labels";
-import type { MyMembership } from "@/lib/types";
+import { MEMBERSHIP_STATUS } from "@uni/shared/labels";
+import type { MyMembership } from "@uni/shared/types";
 
 /** Workspace picker: platform administration and/or the universities the user belongs to. */
 export default function Home() {

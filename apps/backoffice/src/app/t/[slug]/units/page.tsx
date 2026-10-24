@@ -3,16 +3,16 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronLeft, FolderTree, Plus } from "lucide-react";
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { FormDialog, ReasonDialog } from "@/components/ui/dialog";
-import { Checkbox, Field, Input, Select } from "@/components/ui/field";
-import { Card, PageHeader } from "@/components/ui/layout";
-import { EmptyState, QueryView } from "@/components/ui/states";
-import { useToast } from "@/components/ui/toast";
-import { api } from "@/lib/api";
+import { Badge } from "@uni/shared/ui/badge";
+import { Button } from "@uni/shared/ui/button";
+import { FormDialog, ReasonDialog } from "@uni/shared/ui/dialog";
+import { Checkbox, Field, Input, Select } from "@uni/shared/ui/field";
+import { Card, PageHeader } from "@uni/shared/ui/layout";
+import { EmptyState, QueryView } from "@uni/shared/ui/states";
+import { useToast } from "@uni/shared/ui/toast";
+import { api } from "@uni/shared/api";
 import { useSlug, useUnits } from "@/lib/hooks";
-import type { UnitNode, UnitType } from "@/lib/types";
+import type { UnitNode, UnitType } from "@uni/shared/types";
 
 type Dlg = { kind: "create"; parent: UnitNode | null } | { kind: "edit" | "move" | "archive"; unit: UnitNode } | { kind: "type" } | null;
 

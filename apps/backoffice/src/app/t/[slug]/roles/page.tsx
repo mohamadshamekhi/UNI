@@ -3,18 +3,18 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { FormDialog, ReasonDialog } from "@/components/ui/dialog";
-import { Checkbox, Field, Input } from "@/components/ui/field";
-import { Card, PageHeader } from "@/components/ui/layout";
-import { QueryView } from "@/components/ui/states";
-import { useToast } from "@/components/ui/toast";
-import { api } from "@/lib/api";
-import { fmtNum } from "@/lib/format";
+import { Badge } from "@uni/shared/ui/badge";
+import { Button } from "@uni/shared/ui/button";
+import { FormDialog, ReasonDialog } from "@uni/shared/ui/dialog";
+import { Checkbox, Field, Input } from "@uni/shared/ui/field";
+import { Card, PageHeader } from "@uni/shared/ui/layout";
+import { QueryView } from "@uni/shared/ui/states";
+import { useToast } from "@uni/shared/ui/toast";
+import { api } from "@uni/shared/api";
+import { fmtNum } from "@uni/shared/format";
 import { useSlug } from "@/lib/hooks";
-import { PERMISSION_MODULES } from "@/lib/labels";
-import type { PermissionDef, Role } from "@/lib/types";
+import { PERMISSION_MODULES } from "@uni/shared/labels";
+import type { PermissionDef, Role } from "@uni/shared/types";
 
 type Dlg = { kind: "create" } | { kind: "edit"; role: Role } | { kind: "copy"; role: Role } | { kind: "archive"; role: Role } | null;
 

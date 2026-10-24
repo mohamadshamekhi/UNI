@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import type { ReactNode } from "react";
-import type { Tone } from "@/lib/labels";
+import type { Tone } from "../labels";
 
 const tones: Record<Tone, string> = {
   neutral: "bg-muted text-muted-foreground",
