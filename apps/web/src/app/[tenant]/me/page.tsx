@@ -40,17 +40,17 @@ function MeInner() {
   if (q.error) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
   if (!q.data) {
     return (
-      <>
+      <div className="mx-auto w-full max-w-2xl">
         <h1 className="mb-2 text-xl font-bold">درخواست عضویت</h1>
         <p className="mb-6 text-sm text-muted-foreground">حساب شما در سامانه وجود دارد ولی هنوز در این دانشگاه عضو نیستید.</p>
         <ApplyForm />
-      </>
+      </div>
     );
   }
   const m = q.data;
   const st = MEMBERSHIP_STATUS[m.status];
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       {sp.get("registered") && m.status === "pending_review" && (
         <p role="status" className="flex items-center gap-2 rounded-md bg-success-bg px-3 py-3 text-sm text-success">
           <CheckCircle2 aria-hidden className="size-5" />
