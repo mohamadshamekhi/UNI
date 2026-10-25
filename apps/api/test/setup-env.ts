@@ -17,6 +17,8 @@ Object.assign(process.env, {
   S3_SECRET_KEY: 'uni_minio_dev',
   S3_BUCKET: 'uni-files-test',
   FILE_SCAN_MODE: 'skip',
+  CLAMAV_HOST: 'localhost',
+  CLAMAV_PORT: '53310',
   SMS_PROVIDER: 'memory',
   OUTBOX_POLLING: 'off',
   MAINTENANCE: 'off',
