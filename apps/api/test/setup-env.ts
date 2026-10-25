@@ -22,6 +22,7 @@ Object.assign(process.env, {
   SMS_PROVIDER: 'memory',
   OUTBOX_POLLING: 'off',
   MAINTENANCE: 'off',
+  SLA_SWEEP: 'off',
   OTP_IP_LIMIT_PER_HOUR: '100000',
   LOGIN_IP_LIMIT_PER_15MIN: '100000',
 });

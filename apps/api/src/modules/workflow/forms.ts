@@ -1,9 +1,8 @@
 import type { z } from 'zod';
 import { AppError } from '../../common/errors/app-error.js';
-import type { formFieldSchema, slaSchema } from './definition.js';
+import type { formFieldSchema } from './definition.js';
 
 type FormField = z.infer<typeof formFieldSchema>;
-type Sla = z.infer<typeof slaSchema>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:\d{2})?)?$/;
@@ -67,23 +66,4 @@ export function validateForm(fields: FormField[], raw: unknown): { public: Recor
   }
   if (Object.keys(errors).length) throw new AppError('VALIDATION_FAILED', { fields: errors });
   return out;
-}
-
-/**
- * Task due date (WF-20). Business days skip Fridays; the tenant holiday calendar (WF-21) plugs
- * in here later.
- */
-export function dueDate(from: Date, sla: Sla | undefined): Date | null {
-  if (!sla) return null;
-  const d = new Date(from);
-  if (!sla.businessDays) {
-    d.setUTCDate(d.getUTCDate() + sla.days);
-    return d;
-  }
-  let left = sla.days;
-  while (left > 0) {
-    d.setUTCDate(d.getUTCDate() + 1);
-    if (d.getUTCDay() !== 5) left--;
-  }
-  return d;
 }

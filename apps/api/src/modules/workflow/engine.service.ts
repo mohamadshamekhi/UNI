@@ -17,7 +17,9 @@ import {
 import { OutboxService } from '../outbox/outbox.service.js';
 import { BUILTIN_APPLICANT, definitionSchema, selectorSchema, type Selector, type Step, type Transition, type WorkflowDefinition } from './definition.js';
 import { evaluateCondition } from './expr.js';
-import { assertCaseData, dueDate, validateForm } from './forms.js';
+import { dueDate, nextAt, slaSchedule, type WorkCalendar } from './calendar.js';
+import { CalendarService } from './calendar.service.js';
+import { assertCaseData, validateForm } from './forms.js';
 
 export type CaseRow = typeof cases.$inferSelect;
 type TaskRow = typeof caseTasks.$inferSelect;
@@ -36,6 +38,7 @@ interface Run {
   steps: Map<string, Step>;
   now: Date;
   hops: number;
+  cal?: WorkCalendar;
 }
 
 export interface ActInput {
@@ -80,6 +83,7 @@ export class WorkflowEngine {
   constructor(
     private readonly db: DbService,
     private readonly outbox: OutboxService,
+    private readonly calendar: CalendarService,
   ) {}
 
   private actor() {
@@ -210,7 +214,11 @@ export class WorkflowEngine {
     if (!step) throw new AppError('INVALID_STATE_TRANSITION', { step: stepId });
     switch (step.type) {
       case 'human': {
-        await this.createTask(run, { stepId, ...(await this.resolveAssignee(run, step)), parallelOf, dueAt: dueDate(run.now, step.sla) });
+        const assignee = await this.resolveAssignee(run, step);
+        run.cal ??= step.sla ? await this.calendar.load(run.tx, run.c.tenantId, run.now) : undefined;
+        const dueAt = run.cal ? dueDate(run.now, step.sla, run.cal) : null;
+        const schedule = slaSchedule(dueAt, step.sla, run.now);
+        await this.createTask(run, { stepId, ...assignee, parallelOf, dueAt, slaSchedule: schedule, slaNextAt: nextAt(schedule) });
         run.c.currentSteps = [...run.c.currentSteps, stepId];
         await this.event(run, { type: 'entered', stepId });
         return;
@@ -293,7 +301,8 @@ export class WorkflowEngine {
 
   private async createTask(
     run: Run,
-    t: Pick<TaskRow, 'stepId' | 'assigneeType'> & Partial<Pick<TaskRow, 'roleKey' | 'scope' | 'assigneeMembershipId' | 'returnTo' | 'dueAt'>> & { parallelOf?: string },
+    t: Pick<TaskRow, 'stepId' | 'assigneeType'> &
+      Partial<Pick<TaskRow, 'roleKey' | 'scope' | 'assigneeMembershipId' | 'returnTo' | 'dueAt' | 'slaSchedule' | 'slaNextAt'>> & { parallelOf?: string },
   ) {
     await run.tx.insert(caseTasks).values({ tenantId: run.c.tenantId, caseId: run.c.id, ...t, parallelOf: t.parallelOf ?? null });
   }
@@ -342,6 +351,18 @@ export class WorkflowEngine {
       })
       .where(eq(cases.id, c.id));
     run.c.updatedAt = run.now;
+  }
+
+  /** WF-22: closes a case when a deadline action says so (no actor; runs in the SLA sweep). */
+  async closeBySystem(tx: Executor, caseId: string, category: 'cancelled' | 'failure', stepId: string) {
+    const [c] = await tx.select().from(cases).where(eq(cases.id, caseId)).limit(1);
+    if (!c || !OPEN.includes(c.statusCategory)) return;
+    // bump the lock so an action racing with the sweep fails cleanly
+    await tx.update(cases).set({ lockVersion: sql`${cases.lockVersion} + 1` }).where(eq(cases.id, caseId));
+    const run = this.newRun(tx, c, await this.definitionOf(tx, c.workflowVersionId));
+    await this.event(run, { type: 'expired', stepId });
+    await this.close(run, category);
+    await this.save(run);
   }
 
   // ── shared helpers (also used by CasesService) ───────────────────────────

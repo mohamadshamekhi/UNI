@@ -26,8 +26,16 @@ export const assigneeSchema = z.union([
 export const slaSchema = z.object({
   days: z.number().int().min(1).max(365),
   businessDays: z.boolean().default(true),
+  /** days before the deadline to remind the assignee */
   remindBefore: z.array(z.number().int().min(1).max(60)).max(5).default([]),
-  onOverdue: z.enum(['notify', 'escalate', 'close']).default('notify'),
+  /** days after the deadline to remind again */
+  remindAfter: z.array(z.number().int().min(1).max(60)).max(5).default([]),
+  /** WF-22: what happens once the deadline passes */
+  onOverdue: z.enum(['notify', 'escalate', 'extend', 'cancel', 'close']).default('notify'),
+  /** escalation target (onOverdue = escalate); without it the task only gets flagged */
+  escalateTo: z.object({ role: z.string().min(2), scope: z.enum(['tenant', 'case_unit', 'case_unit_tree']).default('case_unit_tree') }).optional(),
+  /** one automatic extension (onOverdue = extend) */
+  extendDays: z.number().int().min(1).max(60).default(3),
 });
 
 const base = { id, title: z.string().min(1).max(120) };

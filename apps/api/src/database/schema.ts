@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  date,
   integer,
   jsonb,
   pgTable,
@@ -42,6 +43,8 @@ export interface TenantSettings {
   membership?: { reapplyAfterDays?: number; revisionDeadlineDays?: number };
   /** FIL-09: days after a final membership decision before identity documents are removed (unset = keep) */
   retention?: { membershipDocsDays?: number };
+  /** WF-20: weekly days off (0 = Sunday … 6 = Saturday); default Friday */
+  weekendDays?: number[];
 }
 
 export const users = pgTable('users', {
@@ -347,6 +350,11 @@ export const caseTasks = pgTable('case_tasks', {
   createdAt: createdAt(),
   completedAt: ts('completed_at'),
   completedBy: uuid('completed_by'),
+  slaSchedule: jsonb('sla_schedule').$type<SlaEntry[]>().notNull().default([]),
+  slaNextAt: ts('sla_next_at'),
+  overdueAt: ts('overdue_at'),
+  escalatedAt: ts('escalated_at'),
+  autoExtended: boolean('auto_extended').notNull().default(false),
 });
 
 export const caseEvents = pgTable('case_events', {
@@ -364,3 +372,18 @@ export const caseEvents = pgTable('case_events', {
   internalNote: text('internal_note'),
   form: jsonb('form').$type<Record<string, unknown>>(),
 });
+
+export const calendarHolidays = pgTable('calendar_holidays', {
+  id: id(),
+  tenantId: uuid('tenant_id'),
+  day: date('day', { mode: 'string' }).notNull(),
+  title: text('title').notNull(),
+  createdAt: createdAt(),
+  createdBy: uuid('created_by'),
+});
+
+export interface SlaEntry {
+  at: string;
+  kind: 'before' | 'due' | 'after';
+  done: boolean;
+}

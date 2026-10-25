@@ -6,6 +6,7 @@ import { DbService, type Executor } from '../../database/db.service.js';
 import { caseEvents, cases, caseTasks, memberships, orgUnits, users, workflows, workflowVersions, type CaseStatusCategory } from '../../database/schema.js';
 import { AclService } from '../acl/acl.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { nextAt, slaSchedule } from './calendar.js';
 import { BUILTIN_APPLICANT, definitionSchema, type WorkflowDefinition } from './definition.js';
 import { roleCoverage, WorkflowEngine, type CaseRow } from './engine.service.js';
 
@@ -98,6 +99,8 @@ export class CasesService {
           assigneeMembershipId: t.assigneeMembershipId,
           action: t.action,
           dueAt: t.dueAt,
+          overdueAt: t.overdueAt,
+          escalatedAt: t.escalatedAt,
           createdAt: t.createdAt,
           completedAt: t.completedAt,
           canAct: canAct.get(t.id) ?? false,
@@ -185,6 +188,7 @@ export class CasesService {
         step_id: string;
         assignee_type: string;
         due_at: Date | null;
+        overdue_at: Date | null;
         created_at: Date;
         title: string | null;
         request_type: string;
@@ -194,7 +198,7 @@ export class CasesService {
         applicant_name: string;
         unit_name: string | null;
       }>(sql`
-        select ct.id, ct.case_id, ct.step_id, ct.assignee_type, ct.due_at, ct.created_at,
+        select ct.id, ct.case_id, ct.step_id, ct.assignee_type, ct.due_at, ct.overdue_at, ct.created_at,
                c.title, c.request_type, c.status_category, w.name_fa as workflow_name, v.definition,
                u.full_name as applicant_name, ou.name_fa as unit_name
         from case_tasks ct
@@ -230,7 +234,7 @@ export class CasesService {
           applicantName: r.applicant_name,
           unitNameFa: r.unit_name,
           dueAt: due,
-          overdue: !!due && due.getTime() < now,
+          overdue: !!r.overdue_at || (!!due && due.getTime() < now),
           createdAt: r.created_at,
         };
       });
@@ -259,9 +263,14 @@ export class CasesService {
     return this.db.run(async (tx) => {
       const { c, task } = await this.engine.claim(tx, caseId, taskId);
       await this.acl.assert('case.assign', { unitId: c.unitId, caseId: c.id }, { type: 'case', id: c.id });
-      const from = task.dueAt && task.dueAt.getTime() > Date.now() ? task.dueAt : new Date();
+      const now = new Date();
+      const from = task.dueAt && task.dueAt > now ? task.dueAt : now;
       const dueAt = new Date(from.getTime() + days * 86_400_000);
-      await tx.update(caseTasks).set({ dueAt }).where(eq(caseTasks.id, task.id));
+      // reminders restart against the new deadline (WF-21)
+      const def = await this.engine.definitionOf(tx, c.workflowVersionId);
+      const step = def.steps.find((s) => s.id === task.stepId);
+      const schedule = slaSchedule(dueAt, step?.type === 'human' ? step.sla : undefined, now);
+      await tx.update(caseTasks).set({ dueAt, slaSchedule: schedule, slaNextAt: nextAt(schedule), overdueAt: null }).where(eq(caseTasks.id, task.id));
       await this.staffEvent(tx, c, { type: 'extended', stepId: task.stepId, internalNote: reason });
       await this.audit.record({ action: 'case.task.extended', targetType: 'case_task', targetId: task.id, before: { dueAt: task.dueAt }, after: { dueAt }, reason });
       return { id: task.id, dueAt };

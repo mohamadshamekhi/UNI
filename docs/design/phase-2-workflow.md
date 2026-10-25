@@ -75,7 +75,11 @@ overlap (WF-08); decision steps have exactly one `otherwise`.
   - step form values: `public` fields merge into `data`, `internal` into `case.internal`; the last action per
     step is in `case.decisions.<step_id>` (dashes → underscores) for routing after a join;
   - system steps emit `workflow.<task>` outbox events; end steps close the case and cancel open tasks.
-- **SLA** (WF-20..24): `due_at` computed with the tenant calendar; reminders/escalations scheduled as BullMQ
+- **SLA** (WF-20..24): `due_at` from the tenant calendar (`settings.weekendDays`, default Friday; national
+  holidays managed by the platform + university closures, `calendar_holidays`). Each task stores its reminder
+  schedule (`sla_schedule`, `sla_next_at`); a one-minute sweep (`SlaService`, row locks with SKIP LOCKED) emits
+  `case.task.reminder` outbox events and runs the overdue action (`notify | escalate | extend | cancel | close`).
+  The schedule is in the database, so restarts lose nothing (chosen over BullMQ delayed jobs: one less moving part).
   delayed jobs keyed by task id (idempotent); a periodic sweep re-enqueues anything missed after restarts.
 - **Sandbox run** (WF-15): executes a draft version against a simulated case in a rolled-back transaction
   with notifications captured instead of sent; result = visited steps + produced tasks.

@@ -9,9 +9,11 @@ import {
   registerStudent,
   setPasswordViaReset,
   startApp,
+  sysPool,
   type TenantFixture,
   type TestApp,
 } from './helpers.js';
+import { SlaService } from '../src/modules/workflow/sla.service.js';
 
 // Sample thesis-like process: expert check → (committee? parallel reviews : advisor) → end
 const definition = {
@@ -315,6 +317,106 @@ describe('workflow runtime (section 7)', () => {
     expect(scoped.body.total).toBeGreaterThan(0);
     const none = await t.http.get('/v1/admin/cases').set(as(scienceExpert.token, tf.slug)).expect(200);
     expect(none.body.total).toBe(0);
+  });
+
+  describe('deadlines (WF-20..24)', () => {
+    const DAY = 86_400_000;
+    const tehranDay = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(d);
+    const slaDef = (onOverdue: string, extra: Record<string, unknown> = {}) => ({
+      start: 'check',
+      steps: [
+        {
+          id: 'check',
+          type: 'human',
+          title: 'بررسی',
+          assignee: { role: 'expert', scope: 'case_unit_tree' },
+          actions: ['ok'],
+          sla: { days: 2, businessDays: true, remindBefore: [1], remindAfter: [1], onOverdue, ...extra },
+        },
+        { id: 'done', type: 'end', title: 'پایان', outcome: 'success' },
+      ],
+      transitions: [{ from: 'check', action: 'ok', to: 'done' }],
+    });
+
+    async function publish(requestType: string, def: unknown) {
+      const w = await t.http.post('/v1/admin/workflows').set(admin()).send({ key: requestType.replaceAll('_', '-'), nameFa: requestType, requestType }).expect(201);
+      const v = (await t.http.get(`/v1/admin/workflows/${w.body.id}`).set(admin())).body.versions[0].id;
+      await t.http.patch(`/v1/admin/workflow-versions/${v}`).set(admin()).send({ definition: def }).expect(200);
+      expect((await t.http.post(`/v1/admin/workflow-versions/${v}/validate`).set(admin()).expect(200)).body.issues).toEqual([]);
+      await t.http.post(`/v1/admin/workflow-versions/${v}/publish`).set(admin()).expect(200);
+    }
+
+    const newCase = async (requestType: string) => {
+      const c = (await t.http.post('/v1/cases').set(as(student.token, tf.slug)).send({ requestType }).expect(201)).body as CaseView;
+      const sv = await staffView(c.id);
+      const task = openTask(sv, 'check') as unknown as { id: string; dueAt: string };
+      return { id: c.id, taskId: task.id, dueAt: new Date(task.dueAt) };
+    };
+
+    it('holidays: national list is shared, university closures are per tenant', async () => {
+      const platform = await createPlatformAdmin(t);
+      const day = `209${Math.floor(Math.random() * 10)}-0${1 + Math.floor(Math.random() * 9)}-1${Math.floor(Math.random() * 9)}`;
+      const nat = await t.http.post('/v1/platform/holidays').set(as(platform.token)).send({ day, title: 'تعطیل رسمی' }).expect(201);
+      const list = await t.http.get(`/v1/admin/holidays?from=${day}&to=${day}`).set(admin()).expect(200);
+      expect(list.body).toEqual([expect.objectContaining({ day, national: true })]);
+      await t.http.delete(`/v1/admin/holidays/${nat.body.id}`).set(admin()).expect(404); // read-only for tenants
+      await t.http.post('/v1/admin/holidays').set(as(expert.token, tf.slug)).send({ day, title: 'x' }).expect(403);
+      await t.http.delete(`/v1/platform/holidays/${nat.body.id}`).set(as(platform.token)).expect(204);
+    });
+
+    it('due dates skip university holidays; reminders, then escalation (WF-20/21/22)', async () => {
+      // close the next five days so two business days land after them
+      const now = Date.now();
+      for (let i = 1; i <= 5; i++) {
+        await t.http.post('/v1/admin/holidays').set(admin()).send({ day: tehranDay(new Date(now + i * DAY)), title: 'تعطیلی دانشگاه' }).expect(201);
+      }
+      await publish('sla_escalate', slaDef('escalate', { escalateTo: { role: 'university_admin', scope: 'tenant' } }));
+      const c = await newCase('sla_escalate');
+      expect(c.dueAt.getTime()).toBeGreaterThan(now + 6 * DAY);
+
+      const sla = t.app.get(SlaService);
+      const pool = sysPool();
+      const reminders = async () =>
+        (await pool.query("select payload->>'kind' as kind from outbox_events where type = 'case.task.reminder' and idempotency_key like $1 order by id", [`sla:${c.taskId}:%`])).rows.map((r) => r.kind);
+
+      expect(await sla.sweep(new Date(c.dueAt.getTime() - DAY + 60_000))).toBeGreaterThan(0);
+      expect(await reminders()).toEqual(['before']);
+
+      await sla.sweep(new Date(c.dueAt.getTime() + 60_000));
+      expect(await reminders()).toEqual(['before', 'due']);
+      // a second sweep at the same time does nothing (idempotent, WF-24)
+      await sla.sweep(new Date(c.dueAt.getTime() + 60_000));
+      expect(await reminders()).toEqual(['before', 'due']);
+
+      // escalated to the university admin role: off the expert's cartable, onto the admin's
+      const expertTasks = (await t.http.get('/v1/me/tasks').set(as(expert.token, tf.slug))).body as { id: string }[];
+      expect(expertTasks.some((x) => x.id === c.taskId)).toBe(false);
+      const adminTasks = (await t.http.get('/v1/me/tasks').set(admin())).body as { id: string; overdue: boolean }[];
+      expect(adminTasks.find((x) => x.id === c.taskId)?.overdue).toBe(true);
+      expect((await staffView(c.id)).history.map((h) => h.type)).toContain('escalated');
+
+      await sla.sweep(new Date(c.dueAt.getTime() + DAY + 60_000));
+      expect(await reminders()).toEqual(['before', 'due', 'after']);
+      await pool.end();
+    });
+
+    it('auto-close after the deadline, and manual extension restarts reminders', async () => {
+      await publish('sla_close', slaDef('close'));
+      const sla = t.app.get(SlaService);
+
+      const extended = await newCase('sla_close');
+      const r = await t.http.post(`/v1/cases/${extended.id}/tasks/${extended.taskId}/extend`).set(admin()).send({ days: 10, reason: 'تمدید' }).expect(200);
+      await sla.sweep(new Date(extended.dueAt.getTime() + 60_000));
+      expect((await staffView(extended.id)).statusCategory).toBe('open'); // new deadline not reached
+      expect(new Date(r.body.dueAt).getTime()).toBeGreaterThan(extended.dueAt.getTime());
+
+      const c = await newCase('sla_close');
+      await sla.sweep(new Date(c.dueAt.getTime() + 60_000));
+      const sv = await staffView(c.id);
+      expect(sv.statusCategory).toBe('failure');
+      expect(sv.history.map((h) => h.type)).toContain('expired');
+      expect(sv.tasks!.every((x) => x.status !== 'open')).toBe(true);
+    });
   });
 
   it('other tenants cannot see the case (TEN-02)', async () => {

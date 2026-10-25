@@ -4,6 +4,7 @@ import { AppError } from '../../common/errors/app-error.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsHexColor,
   IsIn,
@@ -48,6 +49,7 @@ class TenantSettingsDto {
   @IsOptional() @IsIn(['jalali', 'gregorian']) calendar?: 'jalali' | 'gregorian';
   @IsOptional() @IsIn(['fa', 'en']) locale?: 'fa' | 'en';
   @IsOptional() @IsString() @MaxLength(60) timezone?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(3) @IsInt({ each: true }) @Min(0, { each: true }) @Max(6, { each: true }) weekendDays?: number[];
   @IsOptional() @ValidateNested() @Type(() => BrandingDto) branding?: BrandingDto;
   @IsOptional() @ValidateNested() @Type(() => PasswordPolicyDto) passwordPolicy?: PasswordPolicyDto;
   @IsOptional() @ValidateNested() @Type(() => MembershipSettingsDto) membership?: MembershipSettingsDto;

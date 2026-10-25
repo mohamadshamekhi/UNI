@@ -72,6 +72,10 @@ export function validateDefinition(raw: unknown, ctx: ValidationContext): { ok: 
       if ('role' in s.assignee && !ctx.roleKeys.has(s.assignee.role)) {
         issues.push({ code: 'unknown_role', message: `نقش «${s.assignee.role}» در این دانشگاه وجود ندارد.`, path: s.id });
       }
+      const esc = s.sla?.escalateTo;
+      if (esc && !ctx.roleKeys.has(esc.role)) {
+        issues.push({ code: 'unknown_role', message: `نقش ارجاع «${esc.role}» در این دانشگاه وجود ندارد.`, path: `${s.id}.sla` });
+      }
     }
     if (s.type === 'decision') {
       const otherwise = out.filter((t) => t.otherwise).length;

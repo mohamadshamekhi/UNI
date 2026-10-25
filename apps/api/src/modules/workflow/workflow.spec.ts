@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { evaluateCondition, parseExpr } from './expr.js';
 import { selectorsOverlap, validateDefinition } from './validate.js';
 import { selectorMatches } from './engine.service.js';
-import { dueDate, validateForm } from './forms.js';
+import { dueDate, slaSchedule } from './calendar.js';
+import { validateForm } from './forms.js';
 
 describe('condition language (WF-03)', () => {
   const scope = { data: { degree: 'phd', score: 17, tags: ['a', 'b'], needsCommittee: false }, case: { round: 2 }, actor: {} };
@@ -101,11 +102,24 @@ describe('forms, SLA and selectors', () => {
     expect(() => validateForm(fields, { grade: 1, other: true })).toThrow();
   });
 
-  it('business-day due dates skip Fridays', () => {
-    const thu = new Date('2026-10-22T08:00:00Z'); // Thursday
-    expect(dueDate(thu, { days: 1, businessDays: true, remindBefore: [], onOverdue: 'notify' })!.toISOString().slice(0, 10)).toBe('2026-10-24');
-    expect(dueDate(thu, { days: 1, businessDays: false, remindBefore: [], onOverdue: 'notify' })!.toISOString().slice(0, 10)).toBe('2026-10-23');
-    expect(dueDate(thu, undefined)).toBeNull();
+  it('business-day due dates skip the weekend and holidays (WF-20)', () => {
+    const cal = { timeZone: 'Asia/Tehran', weekend: new Set([5]), holidays: new Set(['2026-10-24']) };
+    const sla = { days: 1, businessDays: true, remindBefore: [], remindAfter: [], onOverdue: 'notify' as const, extendDays: 3 };
+    const thu = new Date('2026-10-22T08:00:00Z'); // Thursday; Friday weekend, Saturday holiday
+    expect(dueDate(thu, sla, cal)!.toISOString().slice(0, 10)).toBe('2026-10-25');
+    expect(dueDate(thu, { ...sla, businessDays: false }, cal)!.toISOString().slice(0, 10)).toBe('2026-10-23');
+    expect(dueDate(thu, undefined, cal)).toBeNull();
+  });
+
+  it('reminder schedule drops times already past (WF-21)', () => {
+    const now = new Date('2026-10-22T08:00:00Z');
+    const due = new Date('2026-10-24T08:00:00Z');
+    const sla = { days: 2, businessDays: false, remindBefore: [1, 5], remindAfter: [2], onOverdue: 'notify' as const, extendDays: 3 };
+    expect(slaSchedule(due, sla, now).map((e) => [e.kind, e.at.slice(0, 10)])).toEqual([
+      ['before', '2026-10-23'],
+      ['due', '2026-10-24'],
+      ['after', '2026-10-26'],
+    ]);
   });
 
   it('selector matches degree and unit subtree', () => {
