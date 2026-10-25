@@ -6,7 +6,7 @@ import { Field, Input } from "@uni/shared/ui/field";
 import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
-import { MobileOtp } from "@/components/otp";
+import { MobileOtp } from "@uni/shared/ui/mobile-otp";
 import { AuthFrame } from "@/components/site/auth-frame";
 import { useTenantSlug } from "@/lib/tenant";
 

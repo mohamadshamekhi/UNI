@@ -7,7 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
-import { MobileOtp } from "@/components/otp";
+import { MobileOtp } from "@uni/shared/ui/mobile-otp";
 import { AuthFrame } from "@/components/site/auth-frame";
 import { useTenantSlug } from "@/lib/tenant";
 

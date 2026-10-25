@@ -9,7 +9,7 @@ import { CheckCircle2, GraduationCap, Presentation } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { MobileOtp } from "@/components/otp";
+import { MobileOtp } from "@uni/shared/ui/mobile-otp";
 import { AuthFrame, StepRail } from "@/components/site/auth-frame";
 import { DocumentUpload, EMPTY_PROFILE, ProfileFields, Steps, UnitPicker, profilePayload, type Kind, type ProfileValues, type Uploaded } from "@/components/registration/fields";
 import { usePublicUnits, useTenantSlug } from "@/lib/tenant";

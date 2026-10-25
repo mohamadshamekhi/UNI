@@ -22,7 +22,7 @@ export function MobileOtp({
   onCode,
   initialMobile = "",
 }: {
-  tenant: string;
+  tenant?: string;
   purpose: Purpose;
   submitLabel: string;
   onCode: (mobile: string, code: string) => Promise<void>;
