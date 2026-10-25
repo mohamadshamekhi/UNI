@@ -44,6 +44,13 @@ export const ErrorCodes = {
   FILE_NOT_READY: [HttpStatus.CONFLICT, 'فایل هنوز بررسی امنیتی نشده یا در قرنطینه است.'],
   FILE_TOKEN_INVALID: [HttpStatus.FORBIDDEN, 'لینک دانلود نامعتبر یا منقضی شده است.'],
 
+  WORKFLOW_NOT_AVAILABLE: [HttpStatus.NOT_FOUND, 'برای این نوع درخواست فرایند فعالی تعریف نشده است.'],
+  WORKFLOW_INVALID: [HttpStatus.BAD_REQUEST, 'تعریف گردش‌کار معتبر نیست؛ خطاهای اعتبارسنجی را برطرف کنید.'],
+  WORKFLOW_VERSION_LOCKED: [HttpStatus.CONFLICT, 'نسخه منتشرشده قابل ویرایش نیست؛ نسخه جدید بسازید.'],
+  SELECTOR_OVERLAP: [HttpStatus.CONFLICT, 'نسخه منتشرشده دیگری برای همین نوع درخواست و دامنه وجود دارد.'],
+  ASSIGNEE_UNRESOLVED: [HttpStatus.BAD_REQUEST, 'مسئول این مرحله از فرایند مشخص نشد.'],
+  CASE_STALE: [HttpStatus.CONFLICT, 'پرونده هم‌زمان توسط شخص دیگری تغییر کرد؛ صفحه را تازه کنید.'],
+
   INTERNAL: [HttpStatus.INTERNAL_SERVER_ERROR, 'خطای داخلی رخ داد؛ لطفاً دوباره تلاش کنید.'],
 } as const satisfies Record<string, readonly [HttpStatus, string]>;
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateCondition, parseExpr } from './expr.js';
 import { selectorsOverlap, validateDefinition } from './validate.js';
+import { selectorMatches } from './engine.service.js';
+import { dueDate, validateForm } from './forms.js';
 
 describe('condition language (WF-03)', () => {
   const scope = { data: { degree: 'phd', score: 17, tags: ['a', 'b'], needsCommittee: false }, case: { round: 2 }, actor: {} };
@@ -83,5 +85,49 @@ describe('definition validation (WF-14)', () => {
     expect(selectorsOverlap({ requestType: 'thesis' }, { requestType: 'thesis', degrees: ['msc'] })).toBe(true);
     expect(selectorsOverlap({ requestType: 'thesis', degrees: ['phd'] }, { requestType: 'thesis', degrees: ['msc'] })).toBe(false);
     expect(selectorsOverlap({ requestType: 'thesis' }, { requestType: 'paper' })).toBe(false);
+  });
+});
+
+describe('forms, SLA and selectors', () => {
+  const fields = [
+    { key: 'grade', type: 'number' as const, label: 'نمره', required: true, visibility: 'public' as const },
+    { key: 'note', type: 'textarea' as const, label: 'یادداشت', required: false, visibility: 'internal' as const },
+  ];
+
+  it('splits public and internal values and rejects bad input', () => {
+    expect(validateForm(fields, { grade: 18, note: 'x' })).toEqual({ public: { grade: 18 }, internal: { note: 'x' } });
+    expect(() => validateForm(fields, {})).toThrow();
+    expect(() => validateForm(fields, { grade: '18' })).toThrow();
+    expect(() => validateForm(fields, { grade: 1, other: true })).toThrow();
+  });
+
+  it('business-day due dates skip Fridays', () => {
+    const thu = new Date('2026-10-22T08:00:00Z'); // Thursday
+    expect(dueDate(thu, { days: 1, businessDays: true, remindBefore: [], onOverdue: 'notify' })!.toISOString().slice(0, 10)).toBe('2026-10-24');
+    expect(dueDate(thu, { days: 1, businessDays: false, remindBefore: [], onOverdue: 'notify' })!.toISOString().slice(0, 10)).toBe('2026-10-23');
+    expect(dueDate(thu, undefined)).toBeNull();
+  });
+
+  it('selector matches degree and unit subtree', () => {
+    const s = { requestType: 'x', degrees: ['phd'], unitIds: ['u1'] };
+    expect(selectorMatches(s, { degree: 'phd', unitPath: '/root/u1/dept/' })).toBe(true);
+    expect(selectorMatches(s, { degree: 'msc', unitPath: '/root/u1/dept/' })).toBe(false);
+    expect(selectorMatches(s, { degree: 'phd', unitPath: '/root/u2/' })).toBe(false);
+  });
+
+  it('parallel branches must not route on their own', () => {
+    const def = {
+      start: 'pp',
+      steps: [
+        { id: 'pp', type: 'parallel', title: 'p', branches: ['aa', 'bb'] },
+        { id: 'aa', type: 'human', title: 'a', assignee: { role: 'expert' }, actions: ['ok'] },
+        { id: 'bb', type: 'human', title: 'b', assignee: { role: 'expert' }, actions: ['ok'] },
+        { id: 'end', type: 'end', title: 'e', outcome: 'success' },
+      ],
+      transitions: [{ from: 'pp', to: 'end' }],
+    };
+    expect(validateDefinition(def, { roleKeys: new Set(['expert']) }).issues).toEqual([]);
+    const bad = { ...def, transitions: [...def.transitions, { from: 'aa', action: 'ok', to: 'end' }] };
+    expect(validateDefinition(bad, { roleKeys: new Set(['expert']) }).issues.map((i) => i.code)).toContain('branch_transition');
   });
 });

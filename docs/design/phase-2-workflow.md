@@ -68,6 +68,13 @@ overlap (WF-08); decision steps have exactly one `otherwise`.
   the task (ACL + task assignment + SoD), validates the form, evaluates transitions, writes events and the
   next tasks in **one transaction** with optimistic locking on `cases.version` (WF-05: double submit → one
   transition wins, the other gets `CONFLICT`).
+- **Semantics** (implemented in `apps/api/src/modules/workflow/engine.service.ts`):
+  - human action → first transition of that action whose `when` holds, else the unconditional one;
+  - `@applicant` → applicant task (`resubmit` with a `data` patch re-enters the sending step, `withdraw` cancels);
+  - parallel branches have no transitions of their own; `join: all|any` then follows the parallel's single exit;
+  - step form values: `public` fields merge into `data`, `internal` into `case.internal`; the last action per
+    step is in `case.decisions.<step_id>` (dashes → underscores) for routing after a join;
+  - system steps emit `workflow.<task>` outbox events; end steps close the case and cancel open tasks.
 - **SLA** (WF-20..24): `due_at` computed with the tenant calendar; reminders/escalations scheduled as BullMQ
   delayed jobs keyed by task id (idempotent); a periodic sweep re-enqueues anything missed after restarts.
 - **Sandbox run** (WF-15): executes a draft version against a simulated case in a rolled-back transaction

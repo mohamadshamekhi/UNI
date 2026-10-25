@@ -280,3 +280,87 @@ export const outboxEvents = pgTable('outbox_events', {
   attempts: integer('attempts').notNull().default(0),
   lastError: text('last_error'),
 });
+
+export type WorkflowVersionStatus = 'draft' | 'validated' | 'published' | 'retired';
+export type CaseStatusCategory = 'open' | 'revising' | 'success' | 'failure' | 'cancelled';
+
+export const workflows = pgTable('workflows', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  key: text('key').notNull(),
+  nameFa: text('name_fa').notNull(),
+  requestType: text('request_type').notNull(),
+  description: text('description'),
+  createdAt: createdAt(),
+  archivedAt: ts('archived_at'),
+});
+
+export const workflowVersions = pgTable('workflow_versions', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  workflowId: uuid('workflow_id').notNull(),
+  version: integer('version').notNull(),
+  status: text('status').$type<WorkflowVersionStatus>().notNull().default('draft'),
+  definition: jsonb('definition').$type<unknown>().notNull(),
+  selector: jsonb('selector').$type<unknown>().notNull(),
+  issues: jsonb('issues').$type<unknown[]>().notNull().default([]),
+  createdBy: uuid('created_by'),
+  createdAt: createdAt(),
+  publishedAt: ts('published_at'),
+  publishedBy: uuid('published_by'),
+  retiredAt: ts('retired_at'),
+});
+
+export const cases = pgTable('cases', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  workflowVersionId: uuid('workflow_version_id').notNull(),
+  requestType: text('request_type').notNull(),
+  title: text('title'),
+  applicantMembershipId: uuid('applicant_membership_id').notNull(),
+  unitId: uuid('unit_id'),
+  statusCategory: text('status_category').$type<CaseStatusCategory>().notNull().default('open'),
+  currentSteps: text('current_steps').array().notNull().default(sql`'{}'`),
+  data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
+  internal: jsonb('internal').$type<Record<string, unknown>>().notNull().default({}),
+  decisions: jsonb('decisions').$type<Record<string, string>>().notNull().default({}),
+  lockVersion: integer('lock_version').notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+  closedAt: ts('closed_at'),
+});
+
+export const caseTasks = pgTable('case_tasks', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  caseId: uuid('case_id').notNull(),
+  stepId: text('step_id').notNull(),
+  assigneeType: text('assignee_type').$type<'role' | 'membership' | 'applicant'>().notNull(),
+  roleKey: text('role_key'),
+  scope: text('scope').$type<'tenant' | 'case_unit' | 'case_unit_tree'>(),
+  assigneeMembershipId: uuid('assignee_membership_id'),
+  parallelOf: text('parallel_of'),
+  returnTo: text('return_to'),
+  status: text('status').$type<'open' | 'done' | 'cancelled'>().notNull().default('open'),
+  action: text('action'),
+  dueAt: ts('due_at'),
+  createdAt: createdAt(),
+  completedAt: ts('completed_at'),
+  completedBy: uuid('completed_by'),
+});
+
+export const caseEvents = pgTable('case_events', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  caseId: uuid('case_id').notNull(),
+  occurredAt: ts('occurred_at').notNull().defaultNow(),
+  actorUserId: uuid('actor_user_id'),
+  actorMembershipId: uuid('actor_membership_id'),
+  type: text('type').notNull(),
+  stepId: text('step_id'),
+  action: text('action'),
+  toStep: text('to_step'),
+  publicNote: text('public_note'),
+  internalNote: text('internal_note'),
+  form: jsonb('form').$type<Record<string, unknown>>(),
+});

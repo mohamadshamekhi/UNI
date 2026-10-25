@@ -56,12 +56,19 @@ export function validateDefinition(raw: unknown, ctx: ValidationContext): { ok: 
     }
   });
 
+  // branch steps of a parallel never route on their own: the parallel's single exit does (join)
+  const branchIds = new Set(def.steps.flatMap((s) => (s.type === 'parallel' ? s.branches : [])));
   for (const s of def.steps) {
     const out = def.transitions.filter((t) => t.from === s.id);
-    if (s.type === 'human') {
+    if (s.type === 'human' && branchIds.has(s.id) && out.length) {
+      issues.push({ code: 'branch_transition', message: `شاخه موازی «${s.id}» نباید انتقال خروجی داشته باشد.`, path: s.id });
+    }
+    if (s.type === 'human' && !branchIds.has(s.id)) {
       for (const a of s.actions) {
         if (!out.some((t) => t.action === a)) issues.push({ code: 'action_without_transition', message: `اقدام «${a}» در مرحله «${s.id}» مقصد ندارد.`, path: s.id });
       }
+    }
+    if (s.type === 'human') {
       if ('role' in s.assignee && !ctx.roleKeys.has(s.assignee.role)) {
         issues.push({ code: 'unknown_role', message: `نقش «${s.assignee.role}» در این دانشگاه وجود ندارد.`, path: s.id });
       }
@@ -84,7 +91,13 @@ export function validateDefinition(raw: unknown, ctx: ValidationContext): { ok: 
   // reachability from start and termination of every reachable step
   const edges = new Map<string, string[]>();
   for (const t of def.transitions) if (t.to !== BUILTIN_APPLICANT) edges.set(t.from, [...(edges.get(t.from) ?? []), t.to]);
-  for (const s of def.steps) if (s.type === 'parallel') edges.set(s.id, [...(edges.get(s.id) ?? []), ...s.branches]);
+  for (const s of def.steps) {
+    if (s.type !== 'parallel') continue;
+    edges.set(s.id, [...(edges.get(s.id) ?? []), ...s.branches]);
+    // a branch finishes by joining into the parallel's exit
+    const exit = def.transitions.find((t) => t.from === s.id && t.to !== BUILTIN_APPLICANT);
+    if (exit) for (const b of s.branches) edges.set(b, [...(edges.get(b) ?? []), exit.to]);
+  }
   const reachable = new Set<string>();
   const stack = steps.has(def.start) ? [def.start] : [];
   while (stack.length) {
