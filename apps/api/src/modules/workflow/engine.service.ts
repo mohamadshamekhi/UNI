@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { requestContext } from '../../common/context/request-context.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { DbService, type Executor } from '../../database/db.service.js';
@@ -59,7 +59,7 @@ const decisionKey = (stepId: string) => stepId.replaceAll('-', '_');
  * containing it) for `case_unit`; the case unit or any ancestor for `case_unit_tree`.
  * `ct` and `c` must be in scope as case_tasks / cases aliases.
  */
-export const roleCoverage = (membershipId: string) => sql`exists (
+export const roleCoverage = (membershipId: string | SQL) => sql`exists (
   select 1 from role_assignments ra
   join roles r on r.id = ra.role_id and r.archived_at is null and r.tenant_id = ct.tenant_id
   left join org_units au on au.id = ra.scope_id and ra.scope_type in ('unit', 'unit_tree')
@@ -202,7 +202,8 @@ export class WorkflowEngine {
   private async follow(run: Run, t: Transition, from: string): Promise<void> {
     if (t.to !== BUILTIN_APPLICANT) return this.enter(run, t.to);
     // return to the applicant for revision; resubmission re-enters the step that sent it back
-    await this.createTask(run, { stepId: BUILTIN_APPLICANT, assigneeType: 'applicant', returnTo: from });
+    const taskId = await this.createTask(run, { stepId: BUILTIN_APPLICANT, assigneeType: 'applicant', returnTo: from });
+    await this.outbox.emit('case.returned', { caseId: run.c.id, taskId }, `case.returned:${taskId}`);
     run.c.statusCategory = 'revising';
     run.c.currentSteps = [...run.c.currentSteps, BUILTIN_APPLICANT];
     await this.event(run, { type: 'returned', stepId: from, toStep: BUILTIN_APPLICANT });
@@ -218,7 +219,8 @@ export class WorkflowEngine {
         run.cal ??= step.sla ? await this.calendar.load(run.tx, run.c.tenantId, run.now) : undefined;
         const dueAt = run.cal ? dueDate(run.now, step.sla, run.cal) : null;
         const schedule = slaSchedule(dueAt, step.sla, run.now);
-        await this.createTask(run, { stepId, ...assignee, parallelOf, dueAt, slaSchedule: schedule, slaNextAt: nextAt(schedule) });
+        const taskId = await this.createTask(run, { stepId, ...assignee, parallelOf, dueAt, slaSchedule: schedule, slaNextAt: nextAt(schedule) });
+        await this.outbox.emit('case.task.assigned', { caseId: run.c.id, taskId }, `case.task.assigned:${taskId}`);
         run.c.currentSteps = [...run.c.currentSteps, stepId];
         await this.event(run, { type: 'entered', stepId });
         return;
@@ -303,8 +305,12 @@ export class WorkflowEngine {
     run: Run,
     t: Pick<TaskRow, 'stepId' | 'assigneeType'> &
       Partial<Pick<TaskRow, 'roleKey' | 'scope' | 'assigneeMembershipId' | 'returnTo' | 'dueAt' | 'slaSchedule' | 'slaNextAt'>> & { parallelOf?: string },
-  ) {
-    await run.tx.insert(caseTasks).values({ tenantId: run.c.tenantId, caseId: run.c.id, ...t, parallelOf: t.parallelOf ?? null });
+  ): Promise<string> {
+    const [row] = await run.tx
+      .insert(caseTasks)
+      .values({ tenantId: run.c.tenantId, caseId: run.c.id, ...t, parallelOf: t.parallelOf ?? null })
+      .returning({ id: caseTasks.id });
+    return row!.id;
   }
 
   private async completeTask(run: Run, task: TaskRow, action: string, userId: string) {

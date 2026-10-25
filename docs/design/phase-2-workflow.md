@@ -87,11 +87,18 @@ overlap (WF-08); decision steps have exactly one `otherwise`.
 
 ## 5. Notifications (section 13)
 
-Modules emit domain events through the existing outbox; the notification service resolves rules →
-recipients → channel → template → delivery rows (idempotency key per event×recipient×channel, NTF-05),
-sends via provider adapters with exponential retry and a dead-letter state (NTF-04/06). SMS templates never
-include confidential details (NTF-07); per-tenant SMS quota and quiet hours (NTF-11/13); users can mute
-non-critical channels (NTF-10). In-app inbox with unread counter (NTF-09).
+Implemented in `apps/api/src/modules/notifications`:
+- **Catalog** (`catalog.ts`): events, default recipient rules (`user | applicant | assignee`), allowed variables
+  (confidential ones marked `sensitive`) and default Persian texts per channel. Tenants store only overrides
+  (`notification_templates`, `notification_rules`); saving checks unknown and confidential variables (NTF-02/07).
+- **Dispatch**: outbox handlers resolve recipients (role tasks → every eligible holder, never the applicant),
+  render per channel and write `notification_deliveries` with an idempotency key (outbox id × user × channel;
+  reminders collapse per task × day, NTF-05/12). In-app rows go straight to `notifications` (inbox).
+- **Worker** (5 s, `NOTIFY_WORKER=off` to disable): sends queued SMS through the `SmsProvider` adapter, exponential
+  retry, dead-letter after 5 attempts, monthly per-tenant cap (`settings.notifications.smsMonthlyQuota`,
+  platform-set), quiet hours 22:00–07:00 for non-critical SMS (NTF-04/11/13). Email is modelled but not wired to a
+  provider yet (deliveries are marked `skipped`).
+- Users mute non-critical channels; critical events (invitation, deadline passed, escalation) ignore mutes (NTF-10).
 
 ## 6. API surface (first cut)
 

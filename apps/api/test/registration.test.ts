@@ -43,8 +43,7 @@ describe('student registration → review → membership (section 6, scenario A)
     expect(perms.body['membership.approve']).toBeUndefined();
 
     // decision SMS goes through the outbox (no reason text in the SMS, NTF-07)
-    // other test files leave events behind; drain every batch
-    while ((await t.outbox.drain()) > 0);
+    await t.flush();
     const sms = t.sms.sent.filter((m) => m.to === `+98${s.mobile.slice(1)}`).at(-1);
     expect(sms?.text).toContain('تأیید شد');
   });

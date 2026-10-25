@@ -45,6 +45,8 @@ export interface TenantSettings {
   retention?: { membershipDocsDays?: number };
   /** WF-20: weekly days off (0 = Sunday … 6 = Saturday); default Friday */
   weekendDays?: number[];
+  /** NTF-11: monthly SMS cap (unset = unlimited) */
+  notifications?: { smsMonthlyQuota?: number };
 }
 
 export const users = pgTable('users', {
@@ -387,3 +389,71 @@ export interface SlaEntry {
   kind: 'before' | 'due' | 'after';
   done: boolean;
 }
+
+export type NotificationChannel = 'inapp' | 'sms' | 'email';
+export type DeliveryStatus = 'queued' | 'sent' | 'delivered' | 'failed' | 'dead' | 'skipped';
+
+export const notificationTemplates = pgTable('notification_templates', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  event: text('event').notNull(),
+  channel: text('channel').$type<NotificationChannel>().notNull(),
+  locale: text('locale').notNull().default('fa'),
+  subject: text('subject'),
+  body: text('body').notNull(),
+  updatedAt: updatedAt(),
+  updatedBy: uuid('updated_by'),
+});
+
+export const notificationRules = pgTable('notification_rules', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  event: text('event').notNull(),
+  recipient: text('recipient').notNull(),
+  channels: text('channels').array().$type<NotificationChannel[]>().notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  updatedAt: updatedAt(),
+  updatedBy: uuid('updated_by'),
+});
+
+export const notificationDeliveries = pgTable('notification_deliveries', {
+  id: id(),
+  tenantId: uuid('tenant_id'),
+  event: text('event').notNull(),
+  userId: uuid('user_id').notNull(),
+  channel: text('channel').$type<NotificationChannel>().notNull(),
+  critical: boolean('critical').notNull().default(false),
+  idempotencyKey: text('idempotency_key').notNull(),
+  status: text('status').$type<DeliveryStatus>().notNull().default('queued'),
+  subject: text('subject'),
+  body: text('body').notNull(),
+  attempts: integer('attempts').notNull().default(0),
+  nextAttemptAt: ts('next_attempt_at').notNull().defaultNow(),
+  providerMessageId: text('provider_message_id'),
+  error: text('error'),
+  createdAt: createdAt(),
+  sentAt: ts('sent_at'),
+});
+
+export const notifications = pgTable('notifications', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  userId: uuid('user_id').notNull(),
+  event: text('event').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  link: text('link'),
+  createdAt: createdAt(),
+  readAt: ts('read_at'),
+});
+
+export const notificationMutes = pgTable(
+  'notification_mutes',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    userId: uuid('user_id').notNull(),
+    channel: text('channel').$type<NotificationChannel>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.userId, t.channel] })],
+);

@@ -4,6 +4,7 @@ import pg from 'pg';
 import request from 'supertest';
 import { createApp } from '../src/bootstrap.js';
 import { MemorySmsProvider } from '../src/infra/sms.js';
+import { NotificationsService } from '../src/modules/notifications/notifications.service.js';
 import { OutboxService } from '../src/modules/outbox/outbox.service.js';
 
 export interface TestApp {
@@ -11,6 +12,9 @@ export interface TestApp {
   http: ReturnType<typeof request>;
   sms: MemorySmsProvider;
   outbox: OutboxService;
+  notify: NotificationsService;
+  /** Dispatches pending outbox events, then sends queued SMS (no quiet-hour wait). */
+  flush: () => Promise<void>;
   close: () => Promise<void>;
 }
 
@@ -28,6 +32,13 @@ export async function startApp(): Promise<TestApp> {
     http: request(app.getHttpServer()),
     sms: app.get(MemorySmsProvider),
     outbox: app.get(OutboxService),
+    notify: app.get(NotificationsService),
+    flush: async () => {
+      // other test files leave events behind; drain every batch
+      while ((await app.get(OutboxService).drain()) > 0);
+      const later = new Date(Date.now() + 12 * 3_600_000); // past any quiet hours
+      while ((await app.get(NotificationsService).deliver(later)) > 0);
+    },
     close: () => app.close(),
   };
 }

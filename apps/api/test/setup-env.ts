@@ -23,6 +23,7 @@ Object.assign(process.env, {
   OUTBOX_POLLING: 'off',
   MAINTENANCE: 'off',
   SLA_SWEEP: 'off',
+  NOTIFY_WORKER: 'off',
   OTP_IP_LIMIT_PER_HOUR: '100000',
   LOGIN_IP_LIMIT_PER_15MIN: '100000',
 });

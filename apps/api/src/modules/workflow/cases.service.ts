@@ -6,6 +6,7 @@ import { DbService, type Executor } from '../../database/db.service.js';
 import { caseEvents, cases, caseTasks, memberships, orgUnits, users, workflows, workflowVersions, type CaseStatusCategory } from '../../database/schema.js';
 import { AclService } from '../acl/acl.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { OutboxService } from '../outbox/outbox.service.js';
 import { nextAt, slaSchedule } from './calendar.js';
 import { BUILTIN_APPLICANT, definitionSchema, type WorkflowDefinition } from './definition.js';
 import { roleCoverage, WorkflowEngine, type CaseRow } from './engine.service.js';
@@ -23,6 +24,7 @@ export class CasesService {
     private readonly acl: AclService,
     private readonly audit: AuditService,
     private readonly engine: WorkflowEngine,
+    private readonly outbox: OutboxService,
   ) {}
 
   private me() {
@@ -253,6 +255,7 @@ export class CasesService {
       const before = { assigneeType: task.assigneeType, roleKey: task.roleKey, assigneeMembershipId: task.assigneeMembershipId };
       await tx.update(caseTasks).set({ assigneeType: 'membership', roleKey: null, scope: null, assigneeMembershipId: m.id }).where(eq(caseTasks.id, task.id));
       await this.staffEvent(tx, c, { type: 'reassigned', stepId: task.stepId, internalNote: reason });
+      await this.outbox.emit('case.task.assigned', { caseId: c.id, taskId: task.id }, `case.task.assigned:${task.id}:${c.lockVersion}`);
       await this.audit.record({ action: 'case.task.reassigned', targetType: 'case_task', targetId: task.id, before, after: { assigneeMembershipId: m.id }, reason });
       return { id: task.id, assigneeMembershipId: m.id };
     });

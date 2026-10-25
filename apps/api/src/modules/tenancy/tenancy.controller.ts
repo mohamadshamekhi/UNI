@@ -35,6 +35,10 @@ class PasswordPolicyDto {
   @IsOptional() @IsInt() @Min(8) @Max(64) minLength?: number;
 }
 
+class NotificationSettingsDto {
+  @IsOptional() @IsInt() @Min(0) @Max(1_000_000) smsMonthlyQuota?: number;
+}
+
 class RetentionSettingsDto {
   @IsOptional() @IsInt() @Min(30) @Max(3650) membershipDocsDays?: number;
 }
@@ -59,6 +63,7 @@ class TenantSettingsDto {
 /** Platform-only settings on top of the tenant ones. */
 class PlatformTenantSettingsDto extends TenantSettingsDto {
   @IsOptional() @IsInt() @Min(0) storageQuotaBytes?: number;
+  @IsOptional() @ValidateNested() @Type(() => NotificationSettingsDto) notifications?: NotificationSettingsDto;
 }
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
