@@ -14,7 +14,7 @@ import { Card, Dl, PageHeader } from "@uni/shared/ui/layout";
 import { QueryView } from "@uni/shared/ui/states";
 import { useToast } from "@uni/shared/ui/toast";
 import { api, errorMessage } from "@uni/shared/api";
-import { fmtBytes, fmtDate, fmtDateTime } from "@uni/shared/format";
+import { fmtBytes, fmtDate, fmtDateTime, toFaDigits } from "@uni/shared/format";
 import { useCan, useSlug, useUnits } from "@/lib/hooks";
 import { MEMBERSHIP_EVENT, MEMBERSHIP_KIND, MEMBERSHIP_STATUS, REVISABLE_FIELDS } from "@uni/shared/labels";
 import type { FileInfo, MembershipDetail } from "@uni/shared/types";
@@ -83,7 +83,7 @@ function Detail({ m }: { m: MembershipDetail }) {
             <Dl
               items={[
                 ["وضعیت", <Badge key="s" tone={st.tone}>{st.label}</Badge>],
-                ["شماره دانشجویی/پرسنلی", <span key="n" className="tabular">{m.memberNo ?? "—"}</span>],
+                ["شماره دانشجویی/پرسنلی", <span key="n" className="tabular">{m.memberNo ? toFaDigits(m.memberNo) : "—"}</span>],
                 ["موبایل", <span key="mo" dir="ltr" className="tabular">{m.user.mobile}</span>],
                 ["ایمیل", m.user.email ? <span key="e" dir="ltr">{m.user.email}</span> : "—"],
                 ["تاریخ ثبت", <span key="d" className="tabular">{fmtDateTime(m.submittedAt)}</span>],

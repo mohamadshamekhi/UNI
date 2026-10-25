@@ -13,7 +13,7 @@ import { Field, Input, Select } from "@uni/shared/ui/field";
 import { PageHeader, Table, Td, Th } from "@uni/shared/ui/layout";
 import { EmptyState, QueryView } from "@uni/shared/ui/states";
 import { api } from "@uni/shared/api";
-import { fmtDate, fmtNum } from "@uni/shared/format";
+import { fmtDate, fmtNum, toFaDigits } from "@uni/shared/format";
 import { useCan, useSlug, useUnits } from "@/lib/hooks";
 import { MEMBERSHIP_KIND, MEMBERSHIP_STATUS } from "@uni/shared/labels";
 import type { MembershipRow } from "@uni/shared/types";
@@ -145,7 +145,7 @@ function MembershipsInner() {
                       </Link>
                     </Td>
                     <Td>{MEMBERSHIP_KIND[m.kind]}</Td>
-                    <Td className="tabular">{m.memberNo ?? "—"}</Td>
+                    <Td className="tabular">{m.memberNo ? toFaDigits(m.memberNo) : "—"}</Td>
                     <Td>{m.unitNameFa ?? "—"}</Td>
                     <Td>
                       <Badge tone={MEMBERSHIP_STATUS[m.status].tone}>{MEMBERSHIP_STATUS[m.status].label}</Badge>

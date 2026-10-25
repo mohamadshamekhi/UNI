@@ -7,9 +7,11 @@ import { Badge } from "@uni/shared/ui/badge";
 import { Button } from "@uni/shared/ui/button";
 import { FormDialog } from "@uni/shared/ui/dialog";
 import { Field, Input } from "@uni/shared/ui/field";
-import { Card, PageHeader } from "@uni/shared/ui/layout";
+import { Card } from "@uni/shared/ui/layout";
 import { QueryView } from "@uni/shared/ui/states";
 import { useToast } from "@uni/shared/ui/toast";
+import { Logo } from "@uni/shared/ui/logo";
+import { ThemeToggle } from "@uni/shared/ui/theme";
 import { ArrowRight, Copy, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import QRCode from "qrcode";
@@ -25,17 +27,37 @@ interface MfaStatus {
 export default function AccountPage() {
   const status = useQuery({ queryKey: ["mfa"], queryFn: () => api<MfaStatus>("/v1/auth/2fa") });
   return (
-    <main id="main" className="mx-auto w-full max-w-2xl px-4 py-10">
-      <Link href="/" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowRight aria-hidden className="size-4" />
-        بازگشت
-      </Link>
-      <PageHeader title="امنیت حساب" description="ورود دومرحله‌ای و نشست‌های فعال" />
-      <QueryView query={status}>{(s) => <TwoFactorCard status={s} />}</QueryView>
-      <div className="mt-4">
+    <div className="min-h-screen bg-background">
+      <section className="hero-band relative isolate overflow-hidden">
+        <div aria-hidden className="absolute inset-0 -z-10">
+          <span className="aurora aurora-1 -top-32 -end-10 size-[28rem]" />
+          <span className="aurora aurora-3 -bottom-32 start-0 size-72" />
+          <div className="grid-lines absolute inset-0" />
+        </div>
+        <header className="mx-auto flex h-16 max-w-3xl items-center gap-3 px-4 sm:px-6">
+          <Link href="/" className="flex items-center gap-2.5 font-bold">
+            <Logo className="size-9" />
+            پنل مدیریت
+          </Link>
+          <span className="ms-auto" />
+          <ThemeToggle className="text-white hover:bg-white/10" />
+        </header>
+        <div className="mx-auto max-w-3xl px-4 pt-6 pb-24 sm:px-6">
+          <Link href="/" className="inline-flex items-center gap-1 text-sm text-white/70 hover:text-white">
+            <ArrowRight aria-hidden className="size-4" />
+            بازگشت
+          </Link>
+          <h1 className="mt-3 text-3xl font-black sm:text-4xl">
+            امنیت <span className="text-gold-gradient">حساب</span>
+          </h1>
+          <p className="mt-2 text-sm text-white/70">ورود دومرحله‌ای و دستگاه‌هایی که با حساب شما وارد شده‌اند</p>
+        </div>
+      </section>
+      <main id="main" className="relative mx-auto -mt-14 flex max-w-3xl flex-col gap-5 px-4 pb-16 sm:px-6">
+        <QueryView query={status}>{(s) => <TwoFactorCard status={s} />}</QueryView>
         <Sessions />
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
 
