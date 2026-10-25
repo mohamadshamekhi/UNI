@@ -72,6 +72,8 @@ export class OtpService {
     });
 
     await this.sms.send({ to: mobile, text: `کد تأیید شما: ${code}\nاین کد را در اختیار دیگران قرار ندهید.`, tenantId });
+    // no SMS gateway in local development: echo the code so the UI can show it
+    if (this.env.NODE_ENV === 'development' && this.env.SMS_PROVIDER === 'console') return { ...response, devCode: code };
     return response;
   }
 

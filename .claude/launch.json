@@ -7,7 +7,7 @@
       "runtimeArgs": [
         "--filter",
         "@uni/api",
-        "start"
+        "dev"
       ],
       "port": 4000
     },

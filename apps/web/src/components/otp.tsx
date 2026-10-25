@@ -34,6 +34,8 @@ export function MobileOtp({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resendIn, setResendIn] = useState(0);
+  // only returned by the API in local development (no SMS gateway connected)
+  const [devCode, setDevCode] = useState<string | null>(null);
   const codeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -51,9 +53,10 @@ export function MobileOtp({
     setPending(true);
     setError(null);
     try {
-      const r = await api<{ resendAfterSec: number }>("/v1/auth/otp/request", { method: "POST", tenant, public: true, body: { mobile: m, purpose } });
+      const r = await api<{ resendAfterSec: number; devCode?: string }>("/v1/auth/otp/request", { method: "POST", tenant, public: true, body: { mobile: m, purpose } });
       setPhase("code");
       setResendIn(r.resendAfterSec);
+      setDevCode(r.devCode ?? null);
       setTimeout(() => codeRef.current?.focus(), 0);
     } catch (e) {
       if (e instanceof ApiError && typeof e.details?.retryAfterSec === "number") {
@@ -109,6 +112,25 @@ export function MobileOtp({
               />
             )}
           </Field>
+          {devCode && (
+            <div role="status" className="flex items-center justify-between gap-3 rounded-md border border-dashed border-warning bg-warning-bg px-3 py-2 text-sm text-warning">
+              <span>
+                حالت توسعه — کد پیامک:{" "}
+                <bdi dir="ltr" className="font-mono text-base font-bold tracking-widest">{devCode}</bdi>
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setCode(devCode);
+                  codeRef.current?.focus();
+                }}
+              >
+                درج کد
+              </Button>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <button type="button" className="cursor-pointer text-primary underline disabled:cursor-default disabled:text-muted-foreground disabled:no-underline" disabled={resendIn > 0 || pending} onClick={send}>
               {resendIn > 0 ? `ارسال دوباره تا ${toFaDigits(String(resendIn))} ثانیه دیگر` : "ارسال دوباره کد"}
@@ -120,6 +142,7 @@ export function MobileOtp({
               onClick={() => {
                 setPhase("mobile");
                 setCode("");
+                setDevCode(null);
                 setError(null);
               }}
             >
