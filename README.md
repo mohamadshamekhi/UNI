@@ -29,6 +29,11 @@ httpOnly cookies and `/api/proxy/v1/*` forwards to the API (refreshing once on 4
 ClamAV is behind a compose profile (`docker compose --profile scan up -d clamav`, then
 `FILE_SCAN_MODE=clamav`). Production refuses `FILE_SCAN_MODE=skip`.
 
+## Guides
+
+- [User guide (fa)](docs/guides/user-guide.md) · [Admin guide (fa)](docs/guides/admin-guide.md) · [Deployment (fa)](docs/guides/deployment.md)
+- End-to-end tests: `pnpm test:e2e` (needs the dev stack running; uses system Chrome)
+
 ## Key design decisions (API)
 
 - **Tenant isolation in the database** (TEN-02): every tenant table has `tenant_id` + RLS.
@@ -60,5 +65,4 @@ ClamAV is behind a compose profile (`docker compose --profile scan up -d clamav`
 
 - Real SMS provider adapter (only console/memory now; needs the university's provider).
 - CI/CD, Dockerfiles, backups and monitoring (scheduled for the end of phase 1).
-- Handover docs: user guide, admin guide, deployment guide (API docs at `/docs`).
 - 2FA is optional (platform admins get a banner); enforcing it for platform admins is a policy switch still to decide.
