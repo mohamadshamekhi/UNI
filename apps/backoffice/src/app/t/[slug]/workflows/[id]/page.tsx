@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clsx } from "clsx";
-import { AlertTriangle, ArrowRight, CheckCircle2, CircleDot, Cog, Flag, GitFork, Plus, Rocket, Save, ShieldCheck, Split, UserRound, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, CircleDot, Cog, Copy, Flag, FlaskConical, GitFork, Plus, Rocket, Save, ShieldCheck, Split, UserRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -32,7 +32,8 @@ import {
   type VersionRow,
   type WorkflowDetail,
 } from "@/components/workflow/model";
-import { StepEditor, type RoleOption } from "@/components/workflow/step-editor";
+import { FormBuilder, StepEditor, type RoleOption } from "@/components/workflow/step-editor";
+import { Sandbox } from "@/components/workflow/sandbox";
 import { TransitionsEditor } from "@/components/workflow/transitions-editor";
 import { useSlug, useUnits } from "@/lib/hooks";
 
@@ -45,6 +46,7 @@ function WorkflowInner() {
   const router = useRouter();
   const qc = useQueryClient();
   const toast = useToast();
+  const [copying, setCopying] = useState(false);
   const wf = useQuery({ queryKey: ["workflow", slug, id], queryFn: () => api<WorkflowDetail>(`/v1/admin/workflows/${id}`, { tenant: slug }) });
   const versionId = sp.get("v") ?? wf.data?.versions[0]?.id;
   const version = useQuery({
@@ -78,10 +80,16 @@ function WorkflowInner() {
               title={w.nameFa}
               description={w.description ?? undefined}
               actions={
-                <Button variant="secondary" onClick={newVersion}>
-                  <Plus aria-hidden className="size-4" />
-                  نسخه جدید
-                </Button>
+                <>
+                  <Button variant="ghost" onClick={() => setCopying(true)}>
+                    <Copy aria-hidden className="size-4" />
+                    کپی برای واحد
+                  </Button>
+                  <Button variant="secondary" onClick={newVersion}>
+                    <Plus aria-hidden className="size-4" />
+                    نسخه جدید
+                  </Button>
+                </>
               }
             />
             <nav aria-label="نسخه‌ها" className="mb-5 flex gap-2 overflow-x-auto pb-1">
@@ -110,6 +118,7 @@ function WorkflowInner() {
                 );
               })}
             </nav>
+            <CopyDialog open={copying} onClose={() => setCopying(false)} w={w} />
             {version.isPending ? <Loading /> : version.data ? <Designer key={version.data.id} v={version.data} workflowId={w.id} /> : null}
           </>
         )}
@@ -132,6 +141,7 @@ function Designer({ v, workflowId }: { v: VersionRow; workflowId: string }) {
   const [busy, setBusy] = useState<"save" | "validate" | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [retiring, setRetiring] = useState(false);
+  const [sandbox, setSandbox] = useState(false);
   const readOnly = v.status === "published" || v.status === "retired";
 
   // warn before leaving with unsaved edits
@@ -222,6 +232,10 @@ function Designer({ v, workflowId }: { v: VersionRow; workflowId: string }) {
               <Button variant="secondary" loading={busy === "validate"} disabled={busy !== null} onClick={() => run("validate")}>
                 <ShieldCheck aria-hidden className="size-4" />
                 اعتبارسنجی
+              </Button>
+              <Button variant="secondary" disabled={dirty || busy !== null} title={dirty ? "ابتدا ذخیره کنید" : undefined} onClick={() => setSandbox(true)}>
+                <FlaskConical aria-hidden className="size-4" />
+                اجرای آزمایشی
               </Button>
               <Button disabled={!canPublish} onClick={() => setPublishing(true)} title={canPublish ? undefined : "ابتدا ذخیره و اعتبارسنجی کنید"}>
                 <Rocket aria-hidden className="size-4" />
@@ -343,6 +357,18 @@ function Designer({ v, workflowId }: { v: VersionRow; workflowId: string }) {
         </Card>
       </div>
 
+      <section aria-label="فرم درخواست" className="mt-4">
+        <fieldset disabled={readOnly} className="min-w-0">
+          <FormBuilder
+            title="فرم درخواست (آنچه متقاضی هنگام ثبت پر می‌کند)"
+            empty="فرم درخواست تعریف نشده؛ متقاضی فقط عنوان و توضیحات می‌نویسد. فیلدهای این فرم در شرط‌ها با data.کلید در دسترس‌اند."
+            allowInternal={false}
+            fields={def.requestForm}
+            onChange={(requestForm) => edit({ ...def, requestForm })}
+          />
+        </fieldset>
+      </section>
+
       <section aria-label="انتقال‌ها" className="mt-4">
         <Card title="انتقال‌ها">
           <TransitionsEditor def={def} issues={byTransition} readOnly={readOnly} onChange={(transitions) => edit({ ...def, transitions })} />
@@ -392,6 +418,7 @@ function Designer({ v, workflowId }: { v: VersionRow; workflowId: string }) {
         <pre dir="ltr" className="mt-3 max-h-96 overflow-auto rounded-xl bg-muted p-3 text-xs leading-5">{JSON.stringify({ ...def }, null, 2)}</pre>
       </details>
 
+      <Sandbox open={sandbox} onClose={() => setSandbox(false)} versionId={v.id} def={def} />
       <PublishDialog open={publishing} v={v} onClose={() => setPublishing(false)} onDone={refresh} />
       <ReasonDialog
         open={retiring}
@@ -454,6 +481,51 @@ function PublishDialog({ open, v, onClose, onDone }: { open: boolean; v: Version
       ) : (
         <p className="text-sm text-danger">{errorMessage(impact.error)}</p>
       )}
+    </FormDialog>
+  );
+}
+
+/** WF-19: faculty-specific copy; it is narrower than the source, so both can stay published. */
+function CopyDialog({ open, onClose, w }: { open: boolean; onClose: () => void; w: WorkflowDetail }) {
+  const slug = useSlug();
+  const router = useRouter();
+  const qc = useQueryClient();
+  const { flat: units } = useUnits(slug);
+  const [v, setV] = useState({ nameFa: "", key: "", unitIds: [] as string[] });
+  return (
+    <FormDialog
+      open={open}
+      onClose={onClose}
+      title="کپی گردش‌کار برای یک واحد"
+      submitLabel="ساخت کپی"
+      onSubmit={async () => {
+        const c = await api<{ id: string }>(`/v1/admin/workflows/${w.id}/copy`, { method: "POST", tenant: slug, body: { nameFa: v.nameFa.trim(), key: v.key.trim(), unitIds: v.unitIds } });
+        qc.invalidateQueries({ queryKey: ["workflows", slug] });
+        router.push(`/t/${slug}/workflows/${c.id}`);
+      }}
+    >
+      <p className="text-sm leading-7 text-muted-foreground">
+        آخرین نسخه «{w.nameFa}» به‌عنوان پیش‌نویس یک گردش‌کار جدید کپی می‌شود که فقط برای واحدهای انتخاب‌شده اجرا می‌شود. پس از انتشار، پرونده‌های این واحدها با کپی و بقیه با گردش‌کار اصلی پیش می‌روند.
+      </p>
+      <Field label="نام" required>
+        {(p) => <Input {...p} value={v.nameFa} placeholder={`${w.nameFa} — دانشکده …`} onChange={(e) => setV({ ...v, nameFa: e.target.value })} />}
+      </Field>
+      <Field label="شناسه" required hint="حروف کوچک انگلیسی و خط تیره">
+        {(p) => <Input {...p} dir="ltr" value={v.key} placeholder={`${w.key}-eng`} onChange={(e) => setV({ ...v, key: e.target.value.toLowerCase() })} />}
+      </Field>
+      <fieldset>
+        <legend className="mb-2 text-sm font-medium">واحدها <span className="text-danger" aria-hidden>*</span></legend>
+        <div className="grid max-h-56 gap-2 overflow-y-auto sm:grid-cols-2">
+          {units.map((u) => (
+            <Checkbox
+              key={u.id}
+              label={u.label}
+              checked={v.unitIds.includes(u.id)}
+              onChange={(e) => setV({ ...v, unitIds: e.target.checked ? [...v.unitIds, u.id] : v.unitIds.filter((x) => x !== u.id) })}
+            />
+          ))}
+        </div>
+      </fieldset>
     </FormDialog>
   );
 }

@@ -9,14 +9,14 @@ import { api, ApiError, errorMessage } from "@uni/shared/api";
 import { fmtDateTime, toFaDigits } from "@uni/shared/format";
 import { CASE_EVENT, caseAction, MEMBERSHIP_KIND } from "@uni/shared/labels";
 import { Button } from "@uni/shared/ui/button";
-import { caseRef, CaseStatusBadge, CurrentSteps, DueBadge, eventTone, Timeline } from "@uni/shared/ui/case";
+import { AttachmentList, caseRef, CaseStatusBadge, CurrentSteps, DueBadge, eventTone, Timeline } from "@uni/shared/ui/case";
 import { FormDialog, ReasonDialog } from "@uni/shared/ui/dialog";
 import { Field, Input, Select, Textarea } from "@uni/shared/ui/field";
 import { Card, Dl, PageHeader } from "@uni/shared/ui/layout";
 import { QueryView } from "@uni/shared/ui/states";
 import { useToast } from "@uni/shared/ui/toast";
 import type { CaseTask, MembershipRow, StaffCase } from "@uni/shared/types";
-import { StepForm, type FormValues } from "@/components/case/step-form";
+import { FormFields, type FormValues } from "@uni/shared/ui/form-fields";
 import { useCan, useSlug } from "@/lib/hooks";
 
 export default function CasePage() {
@@ -35,7 +35,8 @@ export default function CasePage() {
 }
 
 const DATA_LABELS: Record<string, string> = { description: "شرح درخواست", degree: "مقطع", advisorId: "استاد راهنما" };
-const valueText = (v: unknown) => (typeof v === "boolean" ? (v ? "بله" : "خیر") : Array.isArray(v) ? `${toFaDigits(String(v.length))} پیوست` : String(v ?? "—"));
+const valueText = (v: unknown, files: Set<string>) =>
+  typeof v === "boolean" ? (v ? "بله" : "خیر") : Array.isArray(v) ? `${toFaDigits(String(v.length))} پیوست` : typeof v === "string" && files.has(v) ? "۱ پیوست" : String(v ?? "—");
 
 function Detail({ c }: { c: StaffCase }) {
   const slug = useSlug();
@@ -44,6 +45,7 @@ function Detail({ c }: { c: StaffCase }) {
   const openTasks = c.tasks.filter((t) => t.status === "open");
   const [reassign, setReassign] = useState<CaseTask | null>(null);
   const [extend, setExtend] = useState<CaseTask | null>(null);
+  const fileSet = new Set(c.attachments.map((a) => a.id));
 
   return (
     <>
@@ -66,7 +68,7 @@ function Detail({ c }: { c: StaffCase }) {
 
           <Card title="اطلاعات درخواست">
             {Object.keys(c.data).length ? (
-              <Dl items={Object.entries(c.data).map(([k, v]) => [DATA_LABELS[k] ?? k, valueText(v)] as [string, string])} />
+              <Dl items={Object.entries(c.data).map(([k, v]) => [c.labels[k] ?? DATA_LABELS[k] ?? k, valueText(v, fileSet)] as [string, string])} />
             ) : (
               <p className="text-sm text-muted-foreground">اطلاعات تکمیلی ثبت نشده است.</p>
             )}
@@ -76,9 +78,13 @@ function Detail({ c }: { c: StaffCase }) {
                   <Lock aria-hidden className="size-3.5" />
                   یادداشت‌ها و فیلدهای داخلی (برای متقاضی نمایش داده نمی‌شود)
                 </p>
-                <Dl items={Object.entries(c.internal).map(([k, v]) => [k, valueText(v)] as [string, string])} />
+                <Dl items={Object.entries(c.internal).map(([k, v]) => [c.labels[k] ?? k, valueText(v, fileSet)] as [string, string])} />
               </div>
             )}
+          </Card>
+
+          <Card title="پیوست‌ها">
+            <AttachmentList tenant={slug} items={c.attachments} labels={c.labels} internalKeys={new Set(Object.keys(c.internal))} />
           </Card>
 
           <Card title="کارهای پرونده">
@@ -192,7 +198,7 @@ function ActionPanel({ c, task }: { c: StaffCase; task: CaseTask }) {
         <DueBadge dueAt={task.dueAt} overdue={!!task.overdueAt} />
       </header>
       <div className="flex flex-col gap-4 p-5">
-        {step?.form && step.form.length > 0 && <StepForm fields={step.form} values={values} onChange={setValues} errors={errors} tenant={slug} />}
+        {step?.form && step.form.length > 0 && <FormFields fields={step.form} values={values} onChange={setValues} errors={errors} tenant={slug} />}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="پیام به متقاضی" hint="در تاریخچه‌ای که متقاضی می‌بیند نمایش داده می‌شود.">
             {(p) => <Textarea {...p} value={publicNote} maxLength={2000} onChange={(e) => setPublicNote(e.target.value)} />}

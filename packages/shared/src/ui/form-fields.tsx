@@ -2,21 +2,23 @@
 
 import { Lock, Paperclip, X } from "lucide-react";
 import { useRef, useState } from "react";
-import { api, errorMessage } from "@uni/shared/api";
-import { JalaliDateInput } from "@uni/shared/ui/jalali-date-input";
-import { Checkbox, Field, Input, Select, Textarea } from "@uni/shared/ui/field";
-import type { FormFieldDef } from "@uni/shared/types";
+import { api, errorMessage } from "../api";
+import { JalaliDateInput } from "./jalali-date-input";
+import { Checkbox, Field, Input, Select, Textarea } from "./field";
+import type { FormFieldDef } from "../types";
 
 export type FormValues = Record<string, unknown>;
 
-/** Renders a step form from its definition (WF-10); internal fields are marked as staff-only. */
-export function StepForm({
+/** Renders a request or step form from its definition (WF-10); internal fields are marked as staff-only. */
+export function FormFields({
   fields,
   values,
   onChange,
   errors,
   tenant,
+  showInternal = true,
 }: {
+  showInternal?: boolean;
   fields: FormFieldDef[];
   values: FormValues;
   onChange: (v: FormValues) => void;
@@ -27,7 +29,7 @@ export function StepForm({
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {fields.map((f) => {
-        const label = f.visibility === "internal" ? `${f.label} (داخلی)` : f.label;
+        const label = f.visibility === "internal" && showInternal ? `${f.label} (داخلی)` : f.label;
         const err = errors[f.key] ? FIELD_ERROR[errors[f.key]!] ?? "مقدار نامعتبر است." : null;
         const wide = f.type === "textarea" || f.type === "file";
         if (f.type === "checkbox") {
@@ -38,7 +40,7 @@ export function StepForm({
           );
         }
         return (
-          <Field key={f.key} label={label} required={f.required} error={err} hint={f.visibility === "internal" ? "به متقاضی نمایش داده نمی‌شود." : undefined} className={wide ? "sm:col-span-2" : undefined}>
+          <Field key={f.key} label={label} required={f.required} error={err} hint={f.visibility === "internal" && showInternal ? "به متقاضی نمایش داده نمی‌شود." : undefined} className={wide ? "sm:col-span-2" : undefined}>
             {(p) => {
               const v = values[f.key];
               switch (f.type) {
@@ -70,11 +72,15 @@ export function StepForm({
   );
 }
 
+/** Names of files uploaded in this session, so re-rendered forms keep showing them. */
+const fileNames = new Map<string, string>();
+
 const FIELD_ERROR: Record<string, string> = { required: "این فیلد الزامی است.", invalid: "مقدار نامعتبر است.", unknown: "فیلد ناشناخته" };
 
 function FileField({ id, tenant, value, onChange }: { id: string; tenant: string; value: string[]; onChange: (ids: string[]) => void }) {
+  const knownNames = Object.fromEntries(value.map((v) => [v, fileNames.get(v) ?? v.slice(0, 8)]));
   const input = useRef<HTMLInputElement>(null);
-  const [names, setNames] = useState<Record<string, string>>({});
+  const [names, setNames] = useState<Record<string, string>>(knownNames);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const upload = async (file: File) => {
@@ -87,6 +93,7 @@ function FileField({ id, tenant, value, onChange }: { id: string; tenant: string
     try {
       const row = await api<{ id: string }>("/v1/files", { method: "POST", tenant, body: fd });
       setNames((n) => ({ ...n, [row.id]: file.name }));
+      fileNames.set(row.id, file.name);
       onChange([...value, row.id]);
     } catch (e) {
       setError(errorMessage(e));
@@ -118,4 +125,22 @@ function FileField({ id, tenant, value, onChange }: { id: string; tenant: string
       {error && <p role="alert" className="text-xs text-danger">{error}</p>}
     </div>
   );
+}
+
+/** File ids held by a form value (single id or list). */
+export const fileIds = (v: unknown): string[] => (typeof v === "string" ? [v] : Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+
+/** Opens a case attachment through a fresh single-use link (preview when the type allows it). */
+export async function openFile(tenant: string, id: string) {
+  const win = window.open("about:blank", "_blank");
+  try {
+    const { url } = await api<{ url: string }>(`/v1/files/${id}/download-link`, { method: "POST", tenant, body: { inline: true } });
+    if (win) {
+      win.opener = null;
+      win.location.href = `/api/proxy${url}`;
+    } else window.location.assign(`/api/proxy${url}`);
+  } catch (e) {
+    win?.close();
+    throw e;
+  }
 }

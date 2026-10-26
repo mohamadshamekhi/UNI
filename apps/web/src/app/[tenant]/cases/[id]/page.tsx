@@ -5,10 +5,11 @@ import { ArrowRight, CheckCircle2, CornerUpLeft } from "lucide-react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
-import { api, errorMessage } from "@uni/shared/api";
+import { api, ApiError, errorMessage } from "@uni/shared/api";
 import { CASE_EVENT, CASE_STATUS, caseAction } from "@uni/shared/labels";
 import { Button } from "@uni/shared/ui/button";
-import { caseRef, CurrentSteps, eventTone, Timeline } from "@uni/shared/ui/case";
+import { AttachmentList, caseRef, CurrentSteps, eventTone, Timeline } from "@uni/shared/ui/case";
+import { FormFields, type FormValues } from "@uni/shared/ui/form-fields";
 import { ReasonDialog } from "@uni/shared/ui/dialog";
 import { Field, Textarea } from "@uni/shared/ui/field";
 import { QueryView } from "@uni/shared/ui/states";
@@ -70,12 +71,16 @@ function CaseInner() {
 
             {c.revisionTaskId && <Revision c={c} />}
 
-            {typeof c.data.description === "string" && (
-              <section className="rounded-3xl border border-border bg-card p-6 sm:p-8">
-                <h2 className="text-lg font-bold">شرح درخواست</h2>
-                <p className="mt-3 leading-8 whitespace-pre-line">{c.data.description}</p>
-              </section>
-            )}
+            <section className="rounded-3xl border border-border bg-card p-6 sm:p-8">
+              <h2 className="text-lg font-bold">اطلاعات درخواست</h2>
+              <RequestData c={c} />
+              {c.attachments.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="mb-3 text-sm font-bold">پیوست‌ها</h3>
+                  <AttachmentList tenant={slug} items={c.attachments} labels={c.labels} />
+                </div>
+              )}
+            </section>
 
             <section aria-labelledby="history" className="rounded-3xl border border-border bg-card p-6 sm:p-8">
               <h2 id="history" className="mb-6 text-lg font-bold">تاریخچه پرونده</h2>
@@ -103,6 +108,8 @@ function Revision({ c }: { c: ApplicantCase }) {
   const lastNote = [...c.history].reverse().find((e) => e.type === "action" && e.note)?.note;
   const [note, setNote] = useState("");
   const [description, setDescription] = useState(typeof c.data.description === "string" ? c.data.description : "");
+  const [values, setValues] = useState<FormValues>(() => Object.fromEntries(c.requestForm.filter((f) => f.key in c.data).map((f) => [f.key, c.data[f.key]])));
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [withdraw, setWithdraw] = useState(false);
@@ -118,9 +125,10 @@ function Revision({ c }: { c: ApplicantCase }) {
     setPending(true);
     setError(null);
     try {
-      await act("resubmit", { publicNote: note.trim() || undefined, data: { description: description.trim() } });
+      await act("resubmit", { publicNote: note.trim() || undefined, data: c.requestForm.length ? values : { description: description.trim() } });
       refresh();
     } catch (err) {
+      if (err instanceof ApiError && err.details?.fields && typeof err.details.fields === "object" && !Array.isArray(err.details.fields)) setFieldErrors(err.details.fields as Record<string, string>);
       setError(errorMessage(err));
     } finally {
       setPending(false);
@@ -141,9 +149,13 @@ function Revision({ c }: { c: ApplicantCase }) {
         </p>
       )}
       <form onSubmit={submit} className="mt-6 flex flex-col gap-4" noValidate>
-        <Field label="شرح درخواست (اصلاح‌شده)">
-          {(p) => <Textarea {...p} className="min-h-32" value={description} maxLength={4000} onChange={(e) => setDescription(e.target.value)} />}
-        </Field>
+        {c.requestForm.length ? (
+          <FormFields fields={c.requestForm} values={values} onChange={setValues} errors={fieldErrors} tenant={slug} showInternal={false} />
+        ) : (
+          <Field label="شرح درخواست (اصلاح‌شده)">
+            {(p) => <Textarea {...p} className="min-h-32" value={description} maxLength={4000} onChange={(e) => setDescription(e.target.value)} />}
+          </Field>
+        )}
         <Field label="پاسخ به کارشناس" hint="توضیح دهید چه چیزی را اصلاح کرده‌اید.">
           {(p) => <Textarea {...p} value={note} maxLength={2000} onChange={(e) => setNote(e.target.value)} />}
         </Field>
@@ -165,6 +177,23 @@ function Revision({ c }: { c: ApplicantCase }) {
         }}
       />
     </section>
+  );
+}
+
+/** Request values with their form labels; file fields are listed under attachments instead. */
+function RequestData({ c }: { c: ApplicantCase }) {
+  const files = new Set(c.attachments.map((a) => a.id));
+  const rows = Object.entries(c.data).filter(([, v]) => !(typeof v === "string" && files.has(v)) && !Array.isArray(v));
+  if (!rows.length) return <p className="mt-3 text-sm text-muted-foreground">اطلاعات تکمیلی ثبت نشده است.</p>;
+  return (
+    <dl className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+      {rows.map(([k, v]) => (
+        <div key={k} className={k === "description" ? "sm:col-span-2" : undefined}>
+          <dt className="text-xs text-muted-foreground">{c.labels[k] ?? (k === "description" ? "شرح درخواست" : k)}</dt>
+          <dd className="mt-1 leading-7 whitespace-pre-line">{typeof v === "boolean" ? (v ? "بله" : "خیر") : String(v)}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

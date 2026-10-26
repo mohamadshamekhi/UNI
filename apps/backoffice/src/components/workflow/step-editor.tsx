@@ -263,7 +263,7 @@ function HumanFields({ step, roles, onChange }: { step: Human; roles: RoleOption
   );
 }
 
-function FormBuilder({ fields, onChange }: { fields: FormFieldDef[]; onChange: (f: FormFieldDef[]) => void }) {
+export function FormBuilder({ fields, onChange, title = "فرم مرحله", empty = "این مرحله فرم ندارد؛ مسئول فقط یادداشت و اقدام ثبت می‌کند.", allowInternal = true }: { fields: FormFieldDef[]; onChange: (f: FormFieldDef[]) => void; title?: string; empty?: string; allowInternal?: boolean }) {
   const set = (i: number, patch: Partial<FormFieldDef>) => onChange(fields.map((f, j) => (j === i ? { ...f, ...patch } : f)));
   const move = (i: number, d: -1 | 1) => {
     const next = [...fields];
@@ -273,7 +273,7 @@ function FormBuilder({ fields, onChange }: { fields: FormFieldDef[]; onChange: (
   return (
     <section className="flex flex-col gap-3 rounded-2xl border border-border p-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold">فرم مرحله</h3>
+        <h3 className="text-sm font-bold">{title}</h3>
         <Button
           size="sm"
           variant="secondary"
@@ -284,7 +284,7 @@ function FormBuilder({ fields, onChange }: { fields: FormFieldDef[]; onChange: (
           فیلد
         </Button>
       </div>
-      {fields.length === 0 && <p className="text-sm text-muted-foreground">این مرحله فرم ندارد؛ مسئول فقط یادداشت و اقدام ثبت می‌کند.</p>}
+      {fields.length === 0 && <p className="text-sm text-muted-foreground">{empty}</p>}
       <ol className="flex flex-col gap-3">
         {fields.map((f, i) => (
           <li key={i} className="rounded-xl bg-muted/50 p-3">
@@ -325,7 +325,7 @@ function FormBuilder({ fields, onChange }: { fields: FormFieldDef[]; onChange: (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap gap-4">
                 <Checkbox label="الزامی" checked={f.required} onChange={(e) => set(i, { required: e.target.checked })} />
-                <Checkbox label="داخلی (متقاضی نمی‌بیند)" checked={f.visibility === "internal"} onChange={(e) => set(i, { visibility: e.target.checked ? "internal" : "public" })} />
+                {allowInternal && <Checkbox label="داخلی (متقاضی نمی‌بیند)" checked={f.visibility === "internal"} onChange={(e) => set(i, { visibility: e.target.checked ? "internal" : "public" })} />}
               </div>
               <div className="flex gap-1">
                 <Button size="sm" variant="ghost" aria-label="بالا" disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp aria-hidden className="size-4" /></Button>

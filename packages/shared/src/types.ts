@@ -193,6 +193,19 @@ interface CaseBase {
   closedAt: string | null;
   data: Record<string, unknown>;
   current: CaseStepRef[];
+  labels: Record<string, string>;
+  requestForm: FormFieldDef[];
+  attachments: CaseAttachment[];
+}
+
+export interface CaseAttachment {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  scanStatus: string;
+  createdAt: string;
+  field: string | null;
 }
 
 export interface ApplicantCase extends CaseBase {
@@ -277,4 +290,5 @@ export interface RequestType {
   requestType: string;
   nameFa: string;
   description: string | null;
+  requestForm: FormFieldDef[];
 }

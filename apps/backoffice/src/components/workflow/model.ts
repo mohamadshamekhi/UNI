@@ -33,6 +33,7 @@ export interface Transition {
 }
 
 export interface Definition {
+  requestForm: FormFieldDef[];
   start: string;
   steps: Step[];
   transitions: Transition[];
@@ -116,6 +117,7 @@ export function blankStep(type: StepType, id: string): Step {
 export function renameStep(def: Definition, from: string, to: string): Definition {
   const r = (x: string) => (x === from ? to : x);
   return {
+    requestForm: def.requestForm,
     start: r(def.start),
     steps: def.steps.map((s) => (s.type === "parallel" ? { ...s, id: r(s.id), branches: s.branches.map(r) } : { ...s, id: r(s.id) })),
     transitions: def.transitions.map((t) => ({ ...t, from: r(t.from), to: r(t.to) })),
@@ -125,6 +127,7 @@ export function renameStep(def: Definition, from: string, to: string): Definitio
 /** Removes a step and every transition touching it. */
 export function removeStep(def: Definition, id: string): Definition {
   return {
+    requestForm: def.requestForm,
     start: def.start === id ? (def.steps.find((s) => s.id !== id)?.id ?? "") : def.start,
     steps: def.steps.filter((s) => s.id !== id).map((s) => (s.type === "parallel" ? { ...s, branches: s.branches.filter((b) => b !== id) } : s)),
     transitions: def.transitions.filter((t) => t.from !== id && t.to !== id),
@@ -141,6 +144,7 @@ export const issueTransition = (i: Issue) => {
 /** Fills the defaults the API schema applies, so stored JSON written by hand edits safely. */
 export function normalize(def: Definition): Definition {
   return {
+    requestForm: (def.requestForm ?? []).map((f) => ({ ...f, required: f.required ?? false, visibility: f.visibility ?? "public" })),
     start: def.start,
     transitions: def.transitions ?? [],
     steps: (def.steps ?? []).map((s): Step => {

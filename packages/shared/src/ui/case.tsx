@@ -1,9 +1,13 @@
+"use client";
+
 import { clsx } from "clsx";
-import { AlarmClock, CircleCheck, CircleDot, CornerUpLeft, Flag, Send, XCircle, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
-import { fmtDate, fmtDateTime } from "../format";
+import { AlarmClock, CircleCheck, CircleDot, CornerUpLeft, FileText, Flag, Lock, Send, XCircle, type LucideIcon } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { errorMessage } from "../api";
+import { fmtBytes, fmtDate, fmtDateTime } from "../format";
 import { CASE_STATUS, type Tone } from "../labels";
-import type { CaseStatusCategory } from "../types";
+import type { CaseAttachment, CaseStatusCategory } from "../types";
+import { openFile } from "./form-fields";
 import { Badge } from "./badge";
 
 export const CaseStatusBadge = ({ status }: { status: CaseStatusCategory }) => <Badge tone={CASE_STATUS[status].tone}>{CASE_STATUS[status].label}</Badge>;
@@ -100,6 +104,46 @@ export function CurrentSteps({ steps, status }: { steps: { stepId: string; title
           </span>
         ))
       )}
+    </div>
+  );
+}
+
+/** Case attachments with their form field; each open issues a fresh single-use link. */
+export function AttachmentList({ tenant, items, labels, internalKeys }: { tenant: string; items: CaseAttachment[]; labels: Record<string, string>; internalKeys?: Set<string> }) {
+  const [error, setError] = useState<string | null>(null);
+  if (!items.length) return <p className="text-sm text-muted-foreground">پیوستی ندارد.</p>;
+  return (
+    <div className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-2">
+        {items.map((f) => {
+          const ready = f.scanStatus === "clean" || f.scanStatus === "skipped";
+          return (
+            <li key={f.id} className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5">
+              <FileText aria-hidden className="size-5 shrink-0 text-primary" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium" dir="auto">{f.originalName}</p>
+                <p className="text-xs text-muted-foreground">
+                  {f.field ? (labels[f.field] ?? f.field) : "پیوست"} · <span className="tabular">{fmtBytes(f.sizeBytes)}</span>
+                  {internalKeys?.has(f.field ?? "") && (
+                    <span className="ms-1 inline-flex items-center gap-0.5">
+                      · <Lock aria-hidden className="size-3" /> داخلی
+                    </span>
+                  )}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={!ready}
+                onClick={() => openFile(tenant, f.id).catch((e) => setError(errorMessage(e)))}
+                className="min-h-9 cursor-pointer rounded-lg px-3 text-sm font-medium text-primary hover:bg-muted disabled:cursor-default disabled:text-muted-foreground"
+              >
+                {ready ? "مشاهده" : "در حال بررسی امنیتی"}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     </div>
   );
 }
