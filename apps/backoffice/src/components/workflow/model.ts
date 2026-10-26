@@ -16,10 +16,10 @@ export interface Sla {
 }
 
 export type Step =
-  | { id: string; title: string; type: "human"; assignee: Assignee; actions: string[]; form: FormFieldDef[]; sla?: Sla }
+  | { id: string; title: string; type: "human"; assignee: Assignee; actions: string[]; form: FormFieldDef[]; sla?: Sla; allowWithdraw?: boolean }
   | { id: string; title: string; type: "decision" }
   | { id: string; title: string; type: "parallel"; branches: string[]; join: "all" | "any" }
-  | { id: string; title: string; type: "system"; task: "notify" | "request_payment" | "tag"; params: Record<string, unknown> }
+  | { id: string; title: string; type: "system"; task: "notify" | "request_payment" | "tag" | "thesis"; params: Record<string, unknown> }
   | { id: string; title: string; type: "end"; outcome: "success" | "failure" };
 
 export type StepType = Step["type"];
@@ -34,6 +34,7 @@ export interface Transition {
 
 export interface Definition {
   requestForm: FormFieldDef[];
+  limits?: { onePerApplicant: boolean; reapplyAfterDays: number };
   start: string;
   steps: Step[];
   transitions: Transition[];

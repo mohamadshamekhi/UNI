@@ -360,6 +360,7 @@ function Designer({ v, workflowId }: { v: VersionRow; workflowId: string }) {
       <section aria-label="فرم درخواست" className="mt-4">
         <fieldset disabled={readOnly} className="min-w-0">
           <FormBuilder
+            roles={roles.data ?? []}
             title="فرم درخواست (آنچه متقاضی هنگام ثبت پر می‌کند)"
             empty="فرم درخواست تعریف نشده؛ متقاضی فقط عنوان و توضیحات می‌نویسد. فیلدهای این فرم در شرط‌ها با data.کلید در دسترس‌اند."
             allowInternal={false}
@@ -367,6 +368,31 @@ function Designer({ v, workflowId }: { v: VersionRow; workflowId: string }) {
             onChange={(requestForm) => edit({ ...def, requestForm })}
           />
         </fieldset>
+      </section>
+
+      <section aria-label="محدودیت‌های متقاضی" className="mt-4">
+        <Card title="محدودیت‌های متقاضی">
+          <fieldset disabled={readOnly} className="flex flex-wrap items-end gap-6">
+            <Checkbox
+              label="هر متقاضی فقط یک درخواست فعال از این نوع"
+              checked={!!def.limits?.onePerApplicant}
+              onChange={(e) => edit({ ...def, limits: { onePerApplicant: e.target.checked, reapplyAfterDays: def.limits?.reapplyAfterDays ?? 0 } })}
+            />
+            <Field label="فاصله ثبت درخواست جدید پس از رد (روز)" className="w-64">
+              {(p) => (
+                <Input
+                  {...p}
+                  type="number"
+                  dir="ltr"
+                  min={0}
+                  max={3650}
+                  value={def.limits?.reapplyAfterDays ?? 0}
+                  onChange={(e) => edit({ ...def, limits: { onePerApplicant: !!def.limits?.onePerApplicant, reapplyAfterDays: Math.max(0, Number(e.target.value) || 0) } })}
+                />
+              )}
+            </Field>
+          </fieldset>
+        </Card>
       </section>
 
       <section aria-label="انتقال‌ها" className="mt-4">

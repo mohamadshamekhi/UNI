@@ -18,6 +18,7 @@ const FIELD_TYPES: Record<FormFieldDef["type"], string> = {
   date: "تاریخ",
   file: "پیوست",
   checkbox: "بله/خیر",
+  member: "انتخاب فرد (استاد، داور…)",
 };
 const STEP_ID = /^[a-z][a-z0-9-]{1,40}$/;
 const ACTION_ID = /^[a-z][a-z0-9_]{1,30}$/;
@@ -138,6 +139,19 @@ export function StepEditor({
               <option value="notify">ارسال اعلان</option>
               <option value="request_payment">درخواست پرداخت</option>
               <option value="tag">افزودن برچسب</option>
+              <option value="thesis">ثبت در پرونده تحصیلی</option>
+            </Select>
+          )}
+        </Field>
+      )}
+      {step.type === "system" && step.task === "thesis" && (
+        <Field label="وضعیت پایان‌نامه پس از این مرحله" hint="عنوان، استادان، داوران، تاریخ دفاع و نمره از اطلاعات پرونده (کلیدهای title، advisorId، reviewers، defenseAt، grade و…) خوانده می‌شود.">
+          {(p) => (
+            <Select {...p} value={String(step.params.status ?? "in_progress")} onChange={(e) => onChange({ ...step, params: { ...step.params, status: e.target.value } })}>
+              <option value="proposal">پیشنهاده</option>
+              <option value="in_progress">در حال انجام</option>
+              <option value="defense_scheduled">آماده دفاع</option>
+              <option value="defended">دفاع‌شده</option>
             </Select>
           )}
         </Field>
@@ -257,13 +271,32 @@ function HumanFields({ step, roles, onChange }: { step: Human; roles: RoleOption
         </div>
       </section>
 
-      <FormBuilder fields={step.form} onChange={(form) => onChange({ ...step, form })} />
+      <FormBuilder fields={step.form} roles={roles} onChange={(form) => onChange({ ...step, form })} />
+      <Checkbox
+        label="متقاضی در این مرحله می‌تواند انصراف دهد"
+        checked={!!step.allowWithdraw}
+        onChange={(e) => onChange({ ...step, allowWithdraw: e.target.checked })}
+      />
       <SlaFields sla={step.sla} roles={roles} onChange={(sla) => onChange({ ...step, sla })} />
     </>
   );
 }
 
-export function FormBuilder({ fields, onChange, title = "فرم مرحله", empty = "این مرحله فرم ندارد؛ مسئول فقط یادداشت و اقدام ثبت می‌کند.", allowInternal = true }: { fields: FormFieldDef[]; onChange: (f: FormFieldDef[]) => void; title?: string; empty?: string; allowInternal?: boolean }) {
+export function FormBuilder({
+  fields,
+  onChange,
+  roles,
+  title = "فرم مرحله",
+  empty = "این مرحله فرم ندارد؛ مسئول فقط یادداشت و اقدام ثبت می‌کند.",
+  allowInternal = true,
+}: {
+  fields: FormFieldDef[];
+  onChange: (f: FormFieldDef[]) => void;
+  roles: RoleOption[];
+  title?: string;
+  empty?: string;
+  allowInternal?: boolean;
+}) {
   const set = (i: number, patch: Partial<FormFieldDef>) => onChange(fields.map((f, j) => (j === i ? { ...f, ...patch } : f)));
   const move = (i: number, d: -1 | 1) => {
     const next = [...fields];
@@ -321,6 +354,45 @@ export function FormBuilder({ fields, onChange, title = "فرم مرحله", emp
                   />
                 )}
               </Field>
+            )}
+            {f.type === "member" && (
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <Field label="از میان دارندگان نقش">
+                  {(p) => (
+                    <Select {...p} value={f.eligibility?.role ?? ""} onChange={(e) => set(i, { eligibility: { role: e.target.value, scope: f.eligibility?.scope ?? "case_unit_tree" } })}>
+                      <option value="">انتخاب نقش</option>
+                      {roles.map((r) => (
+                        <option key={r.key} value={r.key}>{r.nameFa}</option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+                <Field label="دامنه">
+                  {(p) => (
+                    <Select {...p} value={f.eligibility?.scope ?? "case_unit_tree"} onChange={(e) => set(i, { eligibility: { role: f.eligibility?.role ?? "", scope: e.target.value as Scope } })}>
+                      {Object.entries(SCOPES).map(([k, v]) => (
+                        <option key={k} value={k}>{v}</option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+                <Field label="ظرفیت هر فرد" hint="خالی یعنی بدون سقف؛ قابل تغییر برای هر استاد">
+                  {(p) => (
+                    <Input
+                      {...p}
+                      type="number"
+                      dir="ltr"
+                      min={1}
+                      max={100}
+                      value={f.capacity?.default ?? ""}
+                      onChange={(e) => set(i, { capacity: e.target.value ? { default: Math.max(1, Number(e.target.value)) } : undefined })}
+                    />
+                  )}
+                </Field>
+                <div className="sm:col-span-3">
+                  <Checkbox label="انتخاب چند نفر (مثل داوران)" checked={!!f.multiple} onChange={(e) => set(i, { multiple: e.target.checked })} />
+                </div>
+              </div>
             )}
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap gap-4">

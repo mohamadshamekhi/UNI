@@ -147,3 +147,41 @@ export function AttachmentList({ tenant, items, labels, internalKeys }: { tenant
     </div>
   );
 }
+
+/**
+ * THS-06: the definition's main path as a stepper — done, current (the case waits here) and
+ * upcoming. A finished case shows every step done (success) or stops where it ended.
+ */
+export function CaseStepper({ path, current, status }: { path: { stepId: string; title: string }[]; current: string[]; status: CaseStatusCategory }) {
+  const firstCurrent = path.findIndex((s) => current.includes(s.stepId));
+  const done = (i: number) => status === "success" || (firstCurrent >= 0 ? i < firstCurrent : false);
+  return (
+    <ol aria-label="مراحل پرونده" className="flex gap-1 overflow-x-auto pb-2">
+      {path.map((s, i) => {
+        const isCurrent = current.includes(s.stepId) && status !== "success";
+        const isDone = done(i);
+        return (
+          <li key={s.stepId} aria-current={isCurrent ? "step" : undefined} className="flex min-w-28 flex-1 flex-col items-center gap-2 text-center">
+            <div className="flex w-full items-center">
+              <span className={clsx("h-0.5 flex-1", i === 0 ? "bg-transparent" : isDone || isCurrent ? "bg-primary" : "bg-border")} />
+              <span
+                className={clsx(
+                  "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular",
+                  isDone ? "bg-primary text-on-primary" : isCurrent ? "bg-gold text-white ring-4 ring-gold/25" : "bg-muted text-muted-foreground",
+                )}
+              >
+                {isDone ? <CircleCheck aria-hidden className="size-4" /> : String(i + 1).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]!)}
+              </span>
+              <span className={clsx("h-0.5 flex-1", i === path.length - 1 ? "bg-transparent" : isDone ? "bg-primary" : "bg-border")} />
+            </div>
+            <span className={clsx("text-xs leading-5", isCurrent ? "font-bold text-foreground" : isDone ? "text-foreground" : "text-muted-foreground")}>
+              {s.title}
+              {isCurrent && <span className="sr-only"> (مرحله فعلی)</span>}
+              {isDone && <span className="sr-only"> (انجام شد)</span>}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}

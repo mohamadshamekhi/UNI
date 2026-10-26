@@ -166,15 +166,28 @@ export interface AuditRow {
 
 // ── workflow cases (phase 2) ────────────────────────────────────────────────
 
-export type CaseStatusCategory = "open" | "revising" | "success" | "failure" | "cancelled";
+export type CaseStatusCategory = "draft" | "open" | "revising" | "success" | "failure" | "cancelled";
 
 export interface FormFieldDef {
   key: string;
-  type: "text" | "textarea" | "number" | "select" | "date" | "file" | "checkbox";
+  type: "text" | "textarea" | "number" | "select" | "date" | "file" | "checkbox" | "member";
   label: string;
   required: boolean;
   options?: { value: string; label: string }[];
   visibility: "public" | "internal";
+  eligibility?: { role: string; scope: "tenant" | "case_unit" | "case_unit_tree" };
+  capacity?: { default: number };
+  multiple?: boolean;
+}
+
+/** A member who may be chosen in a member field, with their current load (THS-02/04). */
+export interface MemberCandidate {
+  membership_id: string;
+  full_name: string;
+  unit_name: string | null;
+  load: number;
+  capacity: number | null;
+  full: boolean;
 }
 
 export interface CaseStepRef {
@@ -211,6 +224,10 @@ export interface CaseAttachment {
 export interface ApplicantCase extends CaseBase {
   view: "applicant";
   revisionTaskId: string | null;
+  revision: { fields: string[]; dueAt: string | null } | null;
+  waiting: { step: string; dueAt: string | null }[];
+  canWithdraw: boolean;
+  path: CaseStepRef[];
   history: { type: string; occurredAt: string; step: string | null; action: string | null; note: string | null }[];
 }
 
@@ -234,11 +251,12 @@ export interface CaseTask {
 
 export interface StaffCase extends CaseBase {
   view: "staff";
+  similarTitles: { id: string; title: string; statusCategory: CaseStatusCategory; score: number }[];
   unitId: string | null;
   applicant: { fullName: string; memberNo: string | null; kind: MembershipKind } | null;
   internal: Record<string, unknown>;
   decisions: Record<string, string>;
-  steps: { id: string; title: string; actions?: string[]; form?: FormFieldDef[] }[];
+  steps: { id: string; title: string; actions?: string[]; form?: FormFieldDef[]; returnsToApplicant?: string[] }[];
   tasks: CaseTask[];
   history: {
     type: string;
@@ -291,4 +309,28 @@ export interface RequestType {
   nameFa: string;
   description: string | null;
   requestForm: FormFieldDef[];
+}
+
+export type ThesisStatus = "proposal" | "in_progress" | "defense_scheduled" | "defended" | "failed" | "cancelled";
+
+export interface Thesis {
+  id: string;
+  caseId: string;
+  titleFa: string;
+  titleEn: string | null;
+  degree: string | null;
+  researchType: string | null;
+  status: ThesisStatus;
+  defenseAt: string | null;
+  defensePlace: string | null;
+  grade: number | null;
+  gradeLabel: string | null;
+  unitNameFa: string | null;
+  student: { membershipId: string; fullName: string; memberNo: string | null };
+  advisor: { membershipId: string; fullName: string } | null;
+  coAdvisor: { membershipId: string; fullName: string } | null;
+  reviewers: string[];
+  createdAt: string;
+  updatedAt: string;
+  myRole?: "advisor" | "co_advisor" | "reviewer";
 }

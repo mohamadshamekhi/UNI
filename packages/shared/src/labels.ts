@@ -1,4 +1,4 @@
-import type { CaseStatusCategory, MembershipKind, MembershipStatus, ScopeType, TenantStatus } from "./types";
+import type { CaseStatusCategory, ThesisStatus, MembershipKind, MembershipStatus, ScopeType, TenantStatus } from "./types";
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -85,6 +85,7 @@ export const AUDIT_RESULT: Record<string, { label: string; tone: Tone }> = {
 };
 
 export const CASE_STATUS: Record<CaseStatusCategory, { label: string; tone: Tone }> = {
+  draft: { label: "پیش‌نویس", tone: "neutral" },
   open: { label: "در جریان", tone: "info" },
   revising: { label: "نیازمند اصلاح", tone: "warning" },
   success: { label: "تأییدشده", tone: "success" },
@@ -106,6 +107,10 @@ const CASE_ACTIONS: Record<string, string> = {
   success: "تأیید",
   failure: "رد",
   cancelled: "لغو",
+  schedule: "تعیین جلسه دفاع",
+  request_final_files: "درخواست فایل نهایی",
+  pass: "قبول",
+  fail: "مردود",
 };
 export const caseAction = (a: string | null | undefined) => (a ? (CASE_ACTIONS[a] ?? a) : "");
 
@@ -125,4 +130,17 @@ export const CASE_EVENT: Record<string, string> = {
   escalated: "ارجاع به سطح بالاتر",
   overdue: "گذشت مهلت",
   expired: "بسته‌شدن خودکار پس از مهلت",
+  advisor_changed: "تغییر استاد راهنما",
 };
+
+export const THESIS_STATUS: Record<ThesisStatus, { label: string; tone: Tone }> = {
+  proposal: { label: "پیشنهاده", tone: "neutral" },
+  in_progress: { label: "در حال انجام", tone: "info" },
+  defense_scheduled: { label: "آماده دفاع", tone: "warning" },
+  defended: { label: "دفاع‌شده", tone: "success" },
+  failed: { label: "مردود", tone: "danger" },
+  cancelled: { label: "لغوشده", tone: "neutral" },
+};
+
+export const DEGREE: Record<string, string> = { bsc: "کارشناسی", msc: "کارشناسی ارشد", phd: "دکتری" };
+export const MY_ROLE: Record<string, string> = { advisor: "استاد راهنما", co_advisor: "استاد مشاور", reviewer: "داور" };

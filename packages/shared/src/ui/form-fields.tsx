@@ -1,11 +1,11 @@
 "use client";
 
 import { Lock, Paperclip, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../api";
 import { JalaliDateInput } from "./jalali-date-input";
 import { Checkbox, Field, Input, Select, Textarea } from "./field";
-import type { FormFieldDef } from "../types";
+import type { FormFieldDef, MemberCandidate } from "../types";
 
 export type FormValues = Record<string, unknown>;
 
@@ -17,8 +17,11 @@ export function FormFields({
   errors,
   tenant,
   showInternal = true,
+  memberSource,
 }: {
   showInternal?: boolean;
+  /** loads candidates for member fields (THS-02); without it member fields are read-only */
+  memberSource?: (f: FormFieldDef) => Promise<MemberCandidate[]>;
   fields: FormFieldDef[];
   values: FormValues;
   onChange: (v: FormValues) => void;
@@ -31,7 +34,7 @@ export function FormFields({
       {fields.map((f) => {
         const label = f.visibility === "internal" && showInternal ? `${f.label} (داخلی)` : f.label;
         const err = errors[f.key] ? FIELD_ERROR[errors[f.key]!] ?? "مقدار نامعتبر است." : null;
-        const wide = f.type === "textarea" || f.type === "file";
+        const wide = f.type === "textarea" || f.type === "file" || (f.type === "member" && f.multiple);
         if (f.type === "checkbox") {
           return (
             <div key={f.key} className="flex items-center sm:col-span-2">
@@ -59,6 +62,8 @@ export function FormFields({
                   );
                 case "date":
                   return <JalaliDateInput {...p} value={(v as string) ?? ""} onChange={(iso) => set(f.key, iso || undefined)} />;
+                case "member":
+                  return <MemberField {...p} field={f} value={v} source={memberSource} onChange={(x) => set(f.key, x)} />;
                 case "file":
                   return <FileField {...p} tenant={tenant} value={(v as string[]) ?? []} onChange={(ids) => set(f.key, ids.length ? ids : undefined)} />;
                 default:
@@ -75,7 +80,77 @@ export function FormFields({
 /** Names of files uploaded in this session, so re-rendered forms keep showing them. */
 const fileNames = new Map<string, string>();
 
-const FIELD_ERROR: Record<string, string> = { required: "این فیلد الزامی است.", invalid: "مقدار نامعتبر است.", unknown: "فیلد ناشناخته" };
+const FIELD_ERROR: Record<string, string> = {
+  required: "این فیلد الزامی است.",
+  invalid: "مقدار نامعتبر است.",
+  unknown: "فیلد ناشناخته",
+  not_editable: "این فیلد در این اصلاح قابل تغییر نیست.",
+  not_eligible: "فرد انتخاب‌شده برای این نقش مجاز نیست.",
+  capacity_full: "ظرفیت فرد انتخاب‌شده تکمیل است.",
+};
+
+const fa = (n: number) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]!);
+
+/** Member picker (THS-02/04): eligible people with load/capacity; full ones cannot be chosen. */
+function MemberField({
+  id,
+  field,
+  value,
+  source,
+  onChange,
+}: {
+  id: string;
+  field: FormFieldDef;
+  value: unknown;
+  source?: (f: FormFieldDef) => Promise<MemberCandidate[]>;
+  onChange: (v: unknown) => void;
+}) {
+  const [items, setItems] = useState<MemberCandidate[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!source) return;
+    source(field)
+      .then(setItems)
+      .catch((e) => setError(errorMessage(e)));
+  }, [source, field]);
+  const selected = field.multiple ? (Array.isArray(value) ? (value as string[]) : []) : typeof value === "string" ? [value] : [];
+  const load = (m: MemberCandidate) => (m.capacity !== null ? ` — ${fa(m.load)} از ${fa(m.capacity)}` : "");
+  if (error) return <p className="text-sm text-danger">{error}</p>;
+  if (!items) return <div className="h-10 animate-pulse rounded-lg bg-muted/70" />;
+  if (!items.length) return <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">فرد مجازی برای انتخاب پیدا نشد.</p>;
+  if (!field.multiple) {
+    return (
+      <Select id={id} value={selected[0] ?? ""} onChange={(e) => onChange(e.target.value || undefined)}>
+        <option value="">انتخاب کنید</option>
+        {items.map((m) => (
+          <option key={m.membership_id} value={m.membership_id} disabled={m.full && !selected.includes(m.membership_id)}>
+            {m.full_name}
+            {m.unit_name ? ` (${m.unit_name})` : ""}
+            {load(m)}
+            {m.full ? " — ظرفیت تکمیل" : ""}
+          </option>
+        ))}
+      </Select>
+    );
+  }
+  return (
+    <div id={id} className="grid max-h-56 gap-2 overflow-y-auto rounded-lg border border-border p-3 sm:grid-cols-2">
+      {items.map((m) => (
+        <Checkbox
+          key={m.membership_id}
+          label={m.full_name}
+          description={[m.unit_name, m.full ? "ظرفیت تکمیل" : null].filter(Boolean).join(" · ") || undefined}
+          disabled={m.full && !selected.includes(m.membership_id)}
+          checked={selected.includes(m.membership_id)}
+          onChange={(e) => {
+            const next = e.target.checked ? [...selected, m.membership_id] : selected.filter((x) => x !== m.membership_id);
+            onChange(next.length ? next : undefined);
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 function FileField({ id, tenant, value, onChange }: { id: string; tenant: string; value: string[]; onChange: (ids: string[]) => void }) {
   const knownNames = Object.fromEntries(value.map((v) => [v, fileNames.get(v) ?? v.slice(0, 8)]));

@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "@uni/shared/api";
 import { ErrorState, Loading } from "@uni/shared/ui/states";
-import { ArrowRight, BellRing, Building, CalendarDays, FolderKanban, Inbox, Workflow, LayoutDashboard, Lock, ScrollText, Settings, ShieldCheck, Users } from "lucide-react";
+import { ArrowRight, BellRing, Building, CalendarDays, GraduationCap, UsersRound, FolderKanban, Inbox, Workflow, LayoutDashboard, Lock, ScrollText, Settings, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { NotificationBell } from "@uni/shared/ui/notifications";
@@ -28,7 +28,9 @@ export default function TenantLayout({ children }: { children: ReactNode }) {
   const nav: NavItem[] = [
     { href: base, label: "پیشخوان", icon: LayoutDashboard, exact: true, group: "نمای کلی" },
     { href: `${base}/tasks`, label: "کارتابل", icon: Inbox, group: "نمای کلی" },
+    { href: `${base}/supervisions`, label: "دانشجویان من", icon: UsersRound, group: "نمای کلی" },
     ...(has("case.view.scope") ? [{ href: `${base}/cases`, label: "پرونده‌ها", icon: FolderKanban, group: "فرایندها" }] : []),
+    ...(has("case.view.scope") ? [{ href: `${base}/theses`, label: "پایان‌نامه‌ها", icon: GraduationCap, group: "فرایندها" }] : []),
     ...(has("workflow.define") ? [{ href: `${base}/workflows`, label: "گردش‌کارها", icon: Workflow, group: "فرایندها" }] : []),
     ...(has("membership.view") ? [{ href: `${base}/memberships`, label: "عضویت‌ها", icon: Users, group: "اعضا و ساختار" }] : []),
     ...(has("unit.manage") ? [{ href: `${base}/units`, label: "ساختار سازمانی", icon: Building, group: "اعضا و ساختار" }] : []),

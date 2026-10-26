@@ -1,21 +1,21 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, CalendarPlus, Lock, UserRoundCog } from "lucide-react";
+import { ArrowRight, CalendarPlus, Copy, GraduationCap, Lock, UserRoundCog } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { api, ApiError, errorMessage } from "@uni/shared/api";
-import { fmtDateTime, toFaDigits } from "@uni/shared/format";
-import { CASE_EVENT, caseAction, MEMBERSHIP_KIND } from "@uni/shared/labels";
+import { fmtDate, fmtDateTime, toFaDigits } from "@uni/shared/format";
+import { CASE_EVENT, CASE_STATUS, caseAction, MEMBERSHIP_KIND, THESIS_STATUS } from "@uni/shared/labels";
 import { Button } from "@uni/shared/ui/button";
 import { AttachmentList, caseRef, CaseStatusBadge, CurrentSteps, DueBadge, eventTone, Timeline } from "@uni/shared/ui/case";
 import { FormDialog, ReasonDialog } from "@uni/shared/ui/dialog";
-import { Field, Input, Select, Textarea } from "@uni/shared/ui/field";
+import { Checkbox, Field, Input, Select, Textarea } from "@uni/shared/ui/field";
 import { Card, Dl, PageHeader } from "@uni/shared/ui/layout";
 import { QueryView } from "@uni/shared/ui/states";
 import { useToast } from "@uni/shared/ui/toast";
-import type { CaseTask, MembershipRow, StaffCase } from "@uni/shared/types";
+import type { CaseTask, FormFieldDef, MemberCandidate, MembershipRow, StaffCase, Thesis } from "@uni/shared/types";
 import { FormFields, type FormValues } from "@uni/shared/ui/form-fields";
 import { useCan, useSlug } from "@/lib/hooks";
 
@@ -83,6 +83,20 @@ function Detail({ c }: { c: StaffCase }) {
             )}
           </Card>
 
+          {c.similarTitles.length > 0 && (
+            <Card title="عنوان‌های مشابه">
+              <ul className="flex flex-col gap-2 text-sm">
+                {c.similarTitles.map((x) => (
+                  <li key={x.id} className="flex items-center gap-2">
+                    <Copy aria-hidden className="size-4 shrink-0 text-warning" />
+                    <a href={`/t/${slug}/cases/${x.id}`} className="min-w-0 flex-1 truncate text-primary hover:underline">{x.title}</a>
+                    <span className="text-xs text-muted-foreground tabular">{toFaDigits(String(Math.round(x.score * 100)))}٪ · {CASE_STATUS[x.statusCategory].label}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+          <ThesisCard c={c} />
           <Card title="پیوست‌ها">
             <AttachmentList tenant={slug} items={c.attachments} labels={c.labels} internalKeys={new Set(Object.keys(c.internal))} />
           </Card>
@@ -130,9 +144,19 @@ function Detail({ c }: { c: StaffCase }) {
               tone: eventTone(e.type, e.action),
               meta: e.actorName,
               children:
-                e.publicNote || e.internalNote ? (
+                e.publicNote || e.internalNote || e.form?.previous ? (
                   <>
                     {e.publicNote && <p className="rounded-lg bg-muted px-3 py-2">{e.publicNote}</p>}
+                    {e.form?.previous && typeof e.form.previous === "object" && (
+                      <div className="rounded-lg border border-border px-3 py-2 text-xs">
+                        <p className="mb-1 font-semibold">مقادیر پیش از اصلاح:</p>
+                        {Object.entries(e.form.previous as Record<string, unknown>).map(([k, v]) => (
+                          <p key={k}>
+                            {c.labels[k] ?? k}: <span className="text-muted-foreground">{valueText(v, fileSet)}</span>
+                          </p>
+                        ))}
+                      </div>
+                    )}
                     {e.internalNote && (
                       <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs">
                         <span className="font-semibold">داخلی: </span>
@@ -164,6 +188,13 @@ function ActionPanel({ c, task }: { c: StaffCase; task: CaseTask }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
+  const [revFields, setRevFields] = useState<string[]>([]);
+  const [revDays, setRevDays] = useState("7");
+  const memberSource = useCallback(
+    (f: FormFieldDef) => api<MemberCandidate[]>(`/v1/cases/${c.id}/eligible-members`, { tenant: slug, query: { step: task.stepId, field: f.key } }),
+    [c.id, slug, task.stepId],
+  );
+  const toApplicant = step?.returnsToApplicant ?? [];
 
   const submit = async (action: string) => {
     setPending(action);
@@ -173,7 +204,14 @@ function ActionPanel({ c, task }: { c: StaffCase; task: CaseTask }) {
       await api(`/v1/cases/${c.id}/tasks/${task.id}/actions`, {
         method: "POST",
         tenant: slug,
-        body: { action, form: values, publicNote: publicNote.trim() || undefined, internalNote: internalNote.trim() || undefined, expectedVersion: c.lockVersion },
+        body: {
+          action,
+          form: values,
+          publicNote: publicNote.trim() || undefined,
+          internalNote: internalNote.trim() || undefined,
+          expectedVersion: c.lockVersion,
+          ...(toApplicant.includes(action) ? { revision: { fields: revFields, deadlineDays: Number(revDays) || undefined } } : {}),
+        },
       });
       toast(`اقدام «${caseAction(action)}» ثبت شد.`);
       qc.invalidateQueries({ queryKey: ["case", slug, c.id] });
@@ -198,7 +236,7 @@ function ActionPanel({ c, task }: { c: StaffCase; task: CaseTask }) {
         <DueBadge dueAt={task.dueAt} overdue={!!task.overdueAt} />
       </header>
       <div className="flex flex-col gap-4 p-5">
-        {step?.form && step.form.length > 0 && <FormFields fields={step.form} values={values} onChange={setValues} errors={errors} tenant={slug} />}
+        {step?.form && step.form.length > 0 && <FormFields fields={step.form} values={values} onChange={setValues} errors={errors} tenant={slug} memberSource={memberSource} />}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="پیام به متقاضی" hint="در تاریخچه‌ای که متقاضی می‌بیند نمایش داده می‌شود.">
             {(p) => <Textarea {...p} value={publicNote} maxLength={2000} onChange={(e) => setPublicNote(e.target.value)} />}
@@ -207,6 +245,20 @@ function ActionPanel({ c, task }: { c: StaffCase; task: CaseTask }) {
             {(p) => <Textarea {...p} value={internalNote} maxLength={2000} onChange={(e) => setInternalNote(e.target.value)} />}
           </Field>
         </div>
+        {toApplicant.length > 0 && c.requestForm.length > 0 && (
+          <details className="rounded-xl border border-border p-4">
+            <summary className="cursor-pointer text-sm font-semibold">تنظیم اصلاح (برای «{toApplicant.map(caseAction).join("، ")}»)</summary>
+            <p className="mt-2 text-xs text-muted-foreground">فیلدهایی که متقاضی می‌تواند اصلاح کند؛ اگر هیچ‌کدام را انتخاب نکنید همه قابل ویرایش‌اند.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {c.requestForm.map((f) => (
+                <Checkbox key={f.key} label={f.label} checked={revFields.includes(f.key)} onChange={(e) => setRevFields(e.target.checked ? [...revFields, f.key] : revFields.filter((x) => x !== f.key))} />
+              ))}
+            </div>
+            <Field label="مهلت اصلاح (روز)" className="mt-3 max-w-40">
+              {(p) => <Input {...p} type="number" dir="ltr" min={1} max={90} value={revDays} onChange={(e) => setRevDays(e.target.value)} />}
+            </Field>
+          </details>
+        )}
         {error && <p role="alert" className="rounded-md bg-danger-bg px-3 py-2 text-sm text-danger">{error}</p>}
         <div className="flex flex-wrap gap-2">
           {(step?.actions ?? []).map((a) => (
@@ -293,5 +345,84 @@ function ExtendDialog({ c, task, onClose }: { c: StaffCase; task: CaseTask | nul
         {(p) => <Input {...p} type="number" min={1} max={60} dir="ltr" value={days} onChange={(e) => setDays(e.target.value)} />}
       </Field>
     </ReasonDialog>
+  );
+}
+
+/** Thesis record of the case (when it has one) and THS-09 advisor change. */
+function ThesisCard({ c }: { c: StaffCase }) {
+  const slug = useSlug();
+  const can = useCan(slug);
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [changing, setChanging] = useState(false);
+  const [membershipId, setMembershipId] = useState("");
+  const [reason, setReason] = useState("");
+  const thesis = useQuery({ queryKey: ["case-thesis", slug, c.id], queryFn: () => api<Thesis | null>(`/v1/cases/${c.id}/thesis`, { tenant: slug }) });
+  const hasAdvisorField = c.requestForm.some((f) => f.key === "advisorId" && f.type === "member");
+  const candidates = useQuery({
+    queryKey: ["advisor-candidates", slug, c.id],
+    enabled: changing,
+    queryFn: () => api<MemberCandidate[]>("/v1/cases/eligible-members", { tenant: slug, query: { requestType: c.requestType, field: "advisorId", unitId: c.unitId ?? undefined } }),
+  });
+  if (!thesis.data && !hasAdvisorField) return null;
+  const t = thesis.data;
+  const open = c.statusCategory === "open" || c.statusCategory === "revising";
+  return (
+    <Card
+      title="پایان‌نامه"
+      actions={
+        open && hasAdvisorField && can("case.assign") ? (
+          <Button size="sm" variant="secondary" onClick={() => setChanging(true)}>
+            <UserRoundCog aria-hidden className="size-4" />
+            تغییر استاد راهنما
+          </Button>
+        ) : undefined
+      }
+    >
+      {t ? (
+        <Dl
+          items={[
+            ["وضعیت", <span key="s" className="inline-flex items-center gap-1.5"><GraduationCap aria-hidden className="size-4 text-primary" />{THESIS_STATUS[t.status].label}</span>],
+            ["استاد راهنما", t.advisor?.fullName ?? "—"],
+            ["استاد مشاور", t.coAdvisor?.fullName ?? "—"],
+            ["داوران", t.reviewers.length ? t.reviewers.join("، ") : "—"],
+            ["جلسه دفاع", t.defenseAt ? `${fmtDate(t.defenseAt)}${t.defensePlace ? ` — ${t.defensePlace}` : ""}` : "—"],
+            ["نمره", t.grade !== null ? `${toFaDigits(t.grade.toFixed(2))} (${t.gradeLabel})` : "—"],
+          ]}
+        />
+      ) : (
+        <p className="text-sm text-muted-foreground">پرونده تحصیلی پس از تصویب پیشنهاده ساخته می‌شود.</p>
+      )}
+      <FormDialog
+        open={changing}
+        onClose={() => setChanging(false)}
+        title="تغییر استاد راهنما"
+        submitLabel="ثبت تغییر"
+        onSubmit={async () => {
+          const r = await api<{ movedTasks: number }>(`/v1/cases/${c.id}/advisor`, { method: "POST", tenant: slug, body: { membershipId, reason: reason.trim() } });
+          qc.invalidateQueries({ queryKey: ["case", slug, c.id] });
+          qc.invalidateQueries({ queryKey: ["case-thesis", slug, c.id] });
+          toast(r.movedTasks ? "استاد راهنما تغییر کرد و کار باز به ایشان منتقل شد." : "استاد راهنما تغییر کرد.");
+        }}
+      >
+        <Field label="استاد راهنمای جدید" required>
+          {(p) => (
+            <Select {...p} value={membershipId} onChange={(e) => setMembershipId(e.target.value)}>
+              <option value="">انتخاب کنید</option>
+              {candidates.data?.map((m) => (
+                <option key={m.membership_id} value={m.membership_id} disabled={m.full}>
+                  {m.full_name}
+                  {m.unit_name ? ` (${m.unit_name})` : ""}
+                  {m.capacity !== null ? ` — ${toFaDigits(String(m.load))} از ${toFaDigits(String(m.capacity))}` : ""}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label="دلیل" required hint="در تاریخچه و ممیزی ثبت می‌شود.">
+          {(p) => <Textarea {...p} value={reason} maxLength={1000} onChange={(e) => setReason(e.target.value)} />}
+        </Field>
+      </FormDialog>
+    </Card>
   );
 }
