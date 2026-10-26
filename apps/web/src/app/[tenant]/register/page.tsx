@@ -1,6 +1,7 @@
 "use client";
 
 import { api, ApiError, errorMessage } from "@uni/shared/api";
+import { isValidNationalId } from "@uni/shared/national-id";
 import { toFaDigits } from "@uni/shared/format";
 import { Button } from "@uni/shared/ui/button";
 import { Checkbox, Field, Input } from "@uni/shared/ui/field";
@@ -26,6 +27,30 @@ const NID_RE = /^\d{10}$/;
 const toAscii = (s: string) => s.replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
 
 /** Section 6 registration path: unit → info → mobile OTP → document → submit. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/** API field → [wizard step, error key, message]. */
+const FIELD_STEP: Record<string, [number, string, string]> = {
+  kind: [0, "facultyId", "نوع عضویت معتبر نیست."],
+  unitId: [0, "facultyId", "دانشکده انتخاب‌شده معتبر نیست."],
+  extraUnitIds: [0, "facultyId", "واحد انتخاب‌شده معتبر نیست."],
+  fullName: [1, "fullName", "نام و نام خانوادگی معتبر نیست."],
+  memberNo: [1, "memberNo", "شماره دانشجویی/پرسنلی معتبر نیست."],
+  nationalId: [1, "nationalId", "کد ملی معتبر نیست؛ ارقام را دوباره بررسی کنید."],
+  email: [1, "email", "ایمیل معتبر نیست."],
+  profile: [1, "profile", "اطلاعات تحصیلی معتبر نیست."],
+  documentFileIds: [3, "files", "مدارک بارگذاری‌شده معتبر نیست؛ دوباره بارگذاری کنید."],
+  password: [4, "password", "رمز عبور معتبر نیست."],
+};
+
+/** Field named by a VALIDATION_FAILED error: `details.field`, or the first class-validator message. */
+function invalidField(e: ApiError): string | null {
+  const d = e.details as { field?: unknown; fields?: unknown } | undefined;
+  if (typeof d?.field === "string") return d.field;
+  const first = Array.isArray(d?.fields) ? d.fields[0] : null;
+  return typeof first === "string" ? (first.split(/[\s.]/)[0] ?? null) : null;
+}
+
 export default function RegisterPage() {
   const slug = useTenantSlug();
   const router = useRouter();
@@ -55,6 +80,8 @@ export default function RegisterPage() {
       if (info.fullName.trim().length < 3) err.fullName = "نام و نام خانوادگی را کامل وارد کنید.";
       if (!info.memberNo.trim()) err.memberNo = kind === "student" ? "شماره دانشجویی را وارد کنید." : "شماره پرسنلی را وارد کنید.";
       if (info.nationalId && !NID_RE.test(toAscii(info.nationalId))) err.nationalId = "کد ملی باید ۱۰ رقم باشد.";
+      else if (info.nationalId && !isValidNationalId(info.nationalId)) err.nationalId = "کد ملی معتبر نیست؛ ارقام را دوباره بررسی کنید.";
+      if (info.email.trim() && !EMAIL_RE.test(info.email.trim())) err.email = "ایمیل معتبر نیست.";
       if (kind === "student" && !profile.degree) err.profile = "مقطع تحصیلی را انتخاب کنید.";
       if (kind === "faculty" && !profile.academicRank) err.profile = "مرتبه علمی را انتخاب کنید.";
     }
@@ -101,6 +128,14 @@ export default function RegisterPage() {
       if (code === "PROOF_INVALID") {
         setProof(null);
         setStep(2);
+      }
+      const field = code === "VALIDATION_FAILED" ? invalidField(e2 as ApiError) : null;
+      if (field && FIELD_STEP[field]) {
+        // send the applicant back to the step that owns the field, with the error next to it
+        const [target, key, message] = FIELD_STEP[field]!;
+        setErrors({ [key]: message });
+        setStep(target);
+        return;
       }
       setSubmitError({ message: errorMessage(e2), accountExists: code === "ACCOUNT_EXISTS" });
     } finally {
@@ -168,7 +203,7 @@ export default function RegisterPage() {
           <Field label="کد ملی" hint="فقط برای بررسی هویت؛ به صورت رمزنگاری‌شده نگهداری می‌شود." error={errors.nationalId}>
             {(p) => <Input {...p} className="h-11" dir="ltr" inputMode="numeric" maxLength={10} value={info.nationalId} onChange={(e) => setInfo({ ...info, nationalId: e.target.value })} />}
           </Field>
-          <Field label="ایمیل">
+          <Field label="ایمیل" error={errors.email}>
             {(p) => <Input {...p} className="h-11" type="email" dir="ltr" autoComplete="email" value={info.email} onChange={(e) => setInfo({ ...info, email: e.target.value })} />}
           </Field>
           <ProfileFields kind={kind} value={profile} onChange={setProfile} />
