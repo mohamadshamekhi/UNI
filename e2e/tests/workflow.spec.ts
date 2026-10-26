@@ -91,7 +91,7 @@ test.describe.serial("workflow journey (phase 2 gate)", () => {
     await page.getByRole("textbox", { name: "عنوان", exact: true }).fill("گواهی برای بورسیه");
     await page.getByRole("textbox", { name: "موضوع", exact: true }).fill("گواهی اشتغال به تحصیل");
     await page.getByRole("textbox", { name: "شرح درخواست", exact: true }).fill("برای ارائه به بنیاد نخبگان");
-    await page.getByRole("button", { name: "ثبت درخواست" }).click();
+    await page.getByRole("button", { name: "ثبت و ارسال" }).click();
     await page.waitForURL(/\/cases\/[0-9a-f-]{36}/);
     caseId = page.url().match(/cases\/([0-9a-f-]{36})/)![1]!;
     await expect(page.getByText("درخواست شما ثبت و برای بررسی ارجاع شد.")).toBeVisible();
