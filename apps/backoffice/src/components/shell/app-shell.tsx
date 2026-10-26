@@ -35,7 +35,7 @@ const initials = (name?: string) =>
  * Backoffice frame: deep-navy sidebar (same visual language as the public site), sticky top bar
  * with page context, theme toggle and user menu. Sidebar becomes a drawer below lg.
  */
-export function AppShell({ title, subtitle, nav, children }: { title: string; subtitle?: string; nav: NavItem[]; children: ReactNode }) {
+export function AppShell({ title, subtitle, nav, actions, children }: { title: string; subtitle?: string; nav: NavItem[]; actions?: ReactNode; children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [lastPath, setLastPath] = useState(pathname);
@@ -127,6 +127,7 @@ export function AppShell({ title, subtitle, nav, children }: { title: string; su
               )}
             </ol>
           </nav>
+          {actions}
           <ThemeToggle className="hover:bg-muted" />
           <UserMenu />
         </header>

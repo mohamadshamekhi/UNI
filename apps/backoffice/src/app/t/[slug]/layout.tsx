@@ -3,11 +3,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "@uni/shared/api";
 import { ErrorState, Loading } from "@uni/shared/ui/states";
-import { ArrowRight, Building, FolderKanban, Inbox, Workflow, LayoutDashboard, Lock, ScrollText, Settings, ShieldCheck, Users } from "lucide-react";
+import { ArrowRight, BellRing, Building, FolderKanban, Inbox, Workflow, LayoutDashboard, Lock, ScrollText, Settings, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { NotificationBell } from "@uni/shared/ui/notifications";
 import { AppShell, type NavItem } from "@/components/shell/app-shell";
 import { useMe, usePermissions, useSlug } from "@/lib/hooks";
+
+/** Staff links open here; applicant (portal) links are not followed from the panel. */
+const staffLink = (link: string | null) => (link?.startsWith("/t/") ? link : null);
 
 interface PublicTenant {
   nameFa: string;
@@ -30,12 +34,18 @@ export default function TenantLayout({ children }: { children: ReactNode }) {
     ...(has("unit.manage") ? [{ href: `${base}/units`, label: "ساختار سازمانی", icon: Building, group: "اعضا و ساختار" }] : []),
     ...(has("role.manage") ? [{ href: `${base}/roles`, label: "نقش‌ها و دسترسی", icon: ShieldCheck, group: "اعضا و ساختار" }] : []),
     ...(has("audit.view") ? [{ href: `${base}/audit`, label: "ممیزی", icon: ScrollText, group: "سامانه" }] : []),
+    ...(has("tenant.settings.edit") ? [{ href: `${base}/notification-settings`, label: "اعلان‌ها", icon: BellRing, group: "سامانه" }] : []),
     ...(has("tenant.settings.edit") ? [{ href: `${base}/settings`, label: "تنظیمات", icon: Settings, group: "سامانه" }] : []),
   ];
 
   const denied = perms.error instanceof ApiError && perms.error.code === "MEMBERSHIP_REQUIRED";
   return (
-    <AppShell title={tenant.data?.nameFa ?? "…"} subtitle="پنل مدیریت دانشگاه" nav={denied ? [] : nav}>
+    <AppShell
+      title={tenant.data?.nameFa ?? "…"}
+      subtitle="پنل مدیریت دانشگاه"
+      nav={denied ? [] : nav}
+      actions={!denied && perms.data && <NotificationBell tenant={slug} inboxHref={`${base}/notifications`} resolve={staffLink} className="hover:bg-muted" />}
+    >
       {perms.isPending ? <Loading /> : denied ? <AccessDenied slug={slug} /> : perms.error ? <ErrorState error={perms.error} /> : children}
     </AppShell>
   );

@@ -3,6 +3,7 @@
 import { setUnauthorizedHandler } from "@uni/shared/api";
 import { Logo } from "@uni/shared/ui/logo";
 import { ErrorState, Loading } from "@uni/shared/ui/states";
+import { NotificationBell } from "@uni/shared/ui/notifications";
 import { ThemeToggle } from "@uni/shared/ui/theme";
 import { ChevronLeft, FolderOpen, LogIn, LogOut, Menu, UserRound, X } from "lucide-react";
 import Link from "next/link";
@@ -12,6 +13,9 @@ import { CONTAINER, TenantMark } from "@/components/site/tenant-mark";
 import { usePublicTenant, useSession, useTenantSlug, type PublicTenant } from "@/lib/tenant";
 
 const HEX = /^#[0-9a-f]{6}$/i;
+
+/** Applicant links open in the portal; staff (panel) links are not followed here. */
+const portalLink = (link: string | null) => (link && !link.startsWith("/t/") ? link : null);
 
 export default function TenantLayout({ children }: { children: ReactNode }) {
   const slug = useTenantSlug();
@@ -107,6 +111,7 @@ function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: Public
           <ThemeToggle className={solid ? "hover:bg-muted" : "hover:bg-white/10"} />
           {session.data ? (
             <>
+              <NotificationBell tenant={slug} inboxHref={`/${slug}/notifications`} resolve={portalLink} className={solid ? "hover:bg-muted" : "hover:bg-white/10"} />
               <Link href={`/${slug}/me`} className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
                 <UserRound aria-hidden className="size-4" />
                 وضعیت من
@@ -137,6 +142,7 @@ function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: Public
         </nav>
         <div className="ms-auto flex items-center gap-1 md:hidden">
           <ThemeToggle className={solid ? "hover:bg-muted" : "hover:bg-white/10"} />
+          {session.data && <NotificationBell tenant={slug} inboxHref={`/${slug}/notifications`} resolve={portalLink} className={solid ? "hover:bg-muted" : "hover:bg-white/10"} />}
           <button
             type="button"
             aria-label={open ? "بستن منو" : "باز کردن منو"}
