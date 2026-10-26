@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "@uni/shared/api";
 import { ErrorState, Loading } from "@uni/shared/ui/states";
-import { ArrowRight, BellRing, Building, FolderKanban, Inbox, Workflow, LayoutDashboard, Lock, ScrollText, Settings, ShieldCheck, Users } from "lucide-react";
+import { ArrowRight, BellRing, Building, CalendarDays, FolderKanban, Inbox, Workflow, LayoutDashboard, Lock, ScrollText, Settings, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { NotificationBell } from "@uni/shared/ui/notifications";
@@ -34,6 +34,7 @@ export default function TenantLayout({ children }: { children: ReactNode }) {
     ...(has("unit.manage") ? [{ href: `${base}/units`, label: "ساختار سازمانی", icon: Building, group: "اعضا و ساختار" }] : []),
     ...(has("role.manage") ? [{ href: `${base}/roles`, label: "نقش‌ها و دسترسی", icon: ShieldCheck, group: "اعضا و ساختار" }] : []),
     ...(has("audit.view") ? [{ href: `${base}/audit`, label: "ممیزی", icon: ScrollText, group: "سامانه" }] : []),
+    ...(has("tenant.settings.edit") ? [{ href: `${base}/calendar`, label: "تقویم کاری", icon: CalendarDays, group: "سامانه" }] : []),
     ...(has("tenant.settings.edit") ? [{ href: `${base}/notification-settings`, label: "اعلان‌ها", icon: BellRing, group: "سامانه" }] : []),
     ...(has("tenant.settings.edit") ? [{ href: `${base}/settings`, label: "تنظیمات", icon: Settings, group: "سامانه" }] : []),
   ];
