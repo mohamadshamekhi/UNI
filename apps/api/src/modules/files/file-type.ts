@@ -39,6 +39,8 @@ export const UPLOAD_POLICIES = {
     allowProofUpload: true,
   },
   branding_logo: { mimes: ['image/png', 'image/jpeg'], maxBytes: 1 * MB, confidential: false },
+  /** step form attachments (workflow cases) */
+  case_attachment: { mimes: ['application/pdf', 'image/jpeg', 'image/png'], maxBytes: 20 * MB, confidential: true },
 } as const satisfies Record<string, UploadPolicy>;
 
 export type UploadPurpose = keyof typeof UPLOAD_POLICIES;

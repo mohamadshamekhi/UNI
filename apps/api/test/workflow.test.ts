@@ -311,6 +311,8 @@ describe('workflow runtime (section 7)', () => {
   });
 
   it('lists: applicant sees own cases; staff list is scoped', async () => {
+    const types = await t.http.get('/v1/cases/request-types').set(as(student.token, tf.slug)).expect(200);
+    expect(types.body).toContainEqual(expect.objectContaining({ requestType: 'thesis_proposal', nameFa: 'تصویب پروپوزال' }));
     const mine = await t.http.get('/v1/me/cases').set(as(student.token, tf.slug)).expect(200);
     expect(mine.body.total).toBeGreaterThan(3);
     const scoped = await t.http.get('/v1/admin/cases?statusCategory=open').set(as(expert.token, tf.slug)).expect(200);

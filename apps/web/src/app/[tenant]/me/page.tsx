@@ -12,6 +12,7 @@ import { CheckCircle2, Circle, Clock, XCircle } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import { DocumentUpload, EMPTY_PROFILE, ProfileFields, UnitPicker, profilePayload, type Kind, type ProfileValues, type Uploaded } from "@/components/registration/fields";
+import { HERO_PILL } from "@/components/site/hero-pill";
 import { HeroBackdrop } from "@/components/site/sections";
 import { usePublicUnits, useSession, useTenantSlug } from "@/lib/tenant";
 
@@ -127,13 +128,6 @@ function MeInner() {
   );
 }
 
-const HERO_PILL: Record<string, string> = {
-  info: "bg-white text-[#0b1f52]",
-  success: "bg-emerald-400/20 text-emerald-100 ring-1 ring-emerald-300/40",
-  warning: "bg-amber-300/20 text-amber-100 ring-1 ring-amber-200/40",
-  danger: "bg-rose-400/20 text-rose-100 ring-1 ring-rose-300/40",
-  neutral: "bg-white/15 text-white",
-};
 
 /** THS-06/UX-11 stepper: where the request is and what happens next. */
 function Progress({ status }: { status: MembershipStatus }) {

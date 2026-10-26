@@ -39,6 +39,11 @@ export class CasesService {
       const [c] = await tx.select().from(cases).where(eq(cases.id, caseId)).limit(1);
       if (!c) throw new AppError('NOT_FOUND');
       const def = await this.engine.definitionOf(tx, c.workflowVersionId);
+      const [wf] = await tx
+        .select({ name: workflows.nameFa })
+        .from(workflowVersions)
+        .innerJoin(workflows, eq(workflows.id, workflowVersions.workflowId))
+        .where(eq(workflowVersions.id, c.workflowVersionId));
       const tasks = await tx.select().from(caseTasks).where(eq(caseTasks.caseId, c.id)).orderBy(asc(caseTasks.createdAt));
       const events = await tx
         .select({ e: caseEvents, actorName: users.fullName })
@@ -50,6 +55,7 @@ export class CasesService {
         id: c.id,
         title: c.title,
         requestType: c.requestType,
+        workflowName: wf?.name ?? c.requestType,
         statusCategory: c.statusCategory,
         lockVersion: c.lockVersion,
         createdAt: c.createdAt,

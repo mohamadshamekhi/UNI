@@ -163,3 +163,118 @@ export interface AuditRow {
   ip: string | null;
   requestId: string | null;
 }
+
+// ── workflow cases (phase 2) ────────────────────────────────────────────────
+
+export type CaseStatusCategory = "open" | "revising" | "success" | "failure" | "cancelled";
+
+export interface FormFieldDef {
+  key: string;
+  type: "text" | "textarea" | "number" | "select" | "date" | "file" | "checkbox";
+  label: string;
+  required: boolean;
+  options?: { value: string; label: string }[];
+  visibility: "public" | "internal";
+}
+
+export interface CaseStepRef {
+  stepId: string;
+  title: string;
+}
+
+interface CaseBase {
+  id: string;
+  title: string | null;
+  requestType: string;
+  workflowName: string;
+  statusCategory: CaseStatusCategory;
+  lockVersion: number;
+  createdAt: string;
+  closedAt: string | null;
+  data: Record<string, unknown>;
+  current: CaseStepRef[];
+}
+
+export interface ApplicantCase extends CaseBase {
+  view: "applicant";
+  revisionTaskId: string | null;
+  history: { type: string; occurredAt: string; step: string | null; action: string | null; note: string | null }[];
+}
+
+export interface CaseTask {
+  id: string;
+  stepId: string;
+  step: string;
+  status: "open" | "done" | "cancelled";
+  assigneeType: "role" | "membership" | "applicant";
+  roleKey: string | null;
+  scope: string | null;
+  assigneeMembershipId: string | null;
+  action: string | null;
+  dueAt: string | null;
+  overdueAt: string | null;
+  escalatedAt: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  canAct: boolean;
+}
+
+export interface StaffCase extends CaseBase {
+  view: "staff";
+  unitId: string | null;
+  applicant: { fullName: string; memberNo: string | null; kind: MembershipKind } | null;
+  internal: Record<string, unknown>;
+  decisions: Record<string, string>;
+  steps: { id: string; title: string; actions?: string[]; form?: FormFieldDef[] }[];
+  tasks: CaseTask[];
+  history: {
+    type: string;
+    occurredAt: string;
+    stepId: string | null;
+    step: string | null;
+    action: string | null;
+    toStep: string | null;
+    actorName: string | null;
+    publicNote: string | null;
+    internalNote: string | null;
+    form: Record<string, unknown> | null;
+  }[];
+}
+
+export type CaseView = ApplicantCase | StaffCase;
+
+export interface CaseListItem {
+  id: string;
+  title: string | null;
+  requestType: string;
+  statusCategory: CaseStatusCategory;
+  currentSteps: string[];
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+  workflowName: string;
+  unitNameFa: string | null;
+}
+
+export interface CartableTask {
+  id: string;
+  caseId: string;
+  stepId: string;
+  step: string;
+  assigneeType: "role" | "membership" | "applicant";
+  caseTitle: string | null;
+  requestType: string;
+  statusCategory: CaseStatusCategory;
+  workflowName: string;
+  applicantName: string;
+  unitNameFa: string | null;
+  dueAt: string | null;
+  overdue: boolean;
+  createdAt: string;
+}
+
+export interface RequestType {
+  requestType: string;
+  nameFa: string;
+  description: string | null;
+}

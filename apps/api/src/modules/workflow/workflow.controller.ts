@@ -134,7 +134,13 @@ export class CasesController {
     private readonly engine: WorkflowEngine,
     private readonly cases: CasesService,
     private readonly acl: AclService,
+    private readonly workflows: WorkflowsService,
   ) {}
+
+  @Get('cases/request-types')
+  requestTypes() {
+    return this.workflows.requestTypes();
+  }
 
   @Post('cases')
   async create(@Body() body: CreateCaseBody) {

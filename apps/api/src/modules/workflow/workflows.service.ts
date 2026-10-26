@@ -50,6 +50,18 @@ export class WorkflowsService {
     );
   }
 
+  /** Request types an applicant can start now: workflows with a published version. */
+  requestTypes() {
+    return this.db.run((tx) =>
+      tx
+        .selectDistinctOn([workflows.requestType], { requestType: workflows.requestType, nameFa: workflows.nameFa, description: workflows.description })
+        .from(workflows)
+        .innerJoin(workflowVersions, and(eq(workflowVersions.workflowId, workflows.id), eq(workflowVersions.status, 'published')))
+        .where(isNull(workflows.archivedAt))
+        .orderBy(workflows.requestType),
+    );
+  }
+
   async create(input: { key: string; nameFa: string; requestType: string; description?: string }) {
     const tenantId = requestContext.get().tenant!.id;
     return this.db.run(async (tx) => {

@@ -1,4 +1,4 @@
-import type { MembershipKind, MembershipStatus, ScopeType, TenantStatus } from "./types";
+import type { CaseStatusCategory, MembershipKind, MembershipStatus, ScopeType, TenantStatus } from "./types";
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -82,4 +82,47 @@ export const AUDIT_RESULT: Record<string, { label: string; tone: Tone }> = {
   success: { label: "موفق", tone: "success" },
   denied: { label: "ردشده", tone: "danger" },
   error: { label: "خطا", tone: "warning" },
+};
+
+export const CASE_STATUS: Record<CaseStatusCategory, { label: string; tone: Tone }> = {
+  open: { label: "در جریان", tone: "info" },
+  revising: { label: "نیازمند اصلاح", tone: "warning" },
+  success: { label: "تأییدشده", tone: "success" },
+  failure: { label: "ردشده", tone: "danger" },
+  cancelled: { label: "لغوشده", tone: "neutral" },
+};
+
+/** Common workflow action names; definitions may use others, shown as-is. */
+const CASE_ACTIONS: Record<string, string> = {
+  approve: "تأیید",
+  accept: "پذیرش",
+  ok: "تأیید",
+  reject: "رد",
+  return_for_fix: "بازگشت برای اصلاح",
+  revise: "درخواست اصلاح",
+  forward: "ارسال به مرحله بعد",
+  resubmit: "ارسال اصلاحیه",
+  withdraw: "انصراف",
+  success: "تأیید",
+  failure: "رد",
+  cancelled: "لغو",
+};
+export const caseAction = (a: string | null | undefined) => (a ? (CASE_ACTIONS[a] ?? a) : "");
+
+export const CASE_EVENT: Record<string, string> = {
+  created: "ثبت پرونده",
+  entered: "ورود به مرحله",
+  action: "اقدام",
+  decided: "مسیریابی خودکار",
+  joined: "تکمیل بررسی‌های موازی",
+  system: "اقدام سیستمی",
+  returned: "بازگشت به متقاضی برای اصلاح",
+  resubmitted: "ارسال اصلاحیه",
+  withdrawn: "انصراف متقاضی",
+  closed: "پایان پرونده",
+  reassigned: "ارجاع مجدد",
+  extended: "تمدید مهلت",
+  escalated: "ارجاع به سطح بالاتر",
+  overdue: "گذشت مهلت",
+  expired: "بسته‌شدن خودکار پس از مهلت",
 };

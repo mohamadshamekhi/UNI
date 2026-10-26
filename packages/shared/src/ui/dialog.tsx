@@ -127,6 +127,7 @@ export function ReasonDialog({
   submitLabel,
   danger = true,
   onConfirm,
+  children,
 }: {
   open: boolean;
   onClose: () => void;
@@ -135,6 +136,8 @@ export function ReasonDialog({
   submitLabel: string;
   danger?: boolean;
   onConfirm: (reason: string) => Promise<unknown>;
+  /** extra fields shown above the reason */
+  children?: ReactNode;
 }) {
   const [reason, setReason] = useState("");
   const [wasOpen, setWasOpen] = useState(open);
@@ -145,6 +148,7 @@ export function ReasonDialog({
   return (
     <FormDialog open={open} onClose={onClose} title={title} submitLabel={submitLabel} danger={danger} onSubmit={() => onConfirm(reason.trim())}>
       {description && <p className="text-sm text-muted-foreground">{description}</p>}
+      {children}
       <Field label="دلیل" required hint="در تاریخچه و ممیزی ثبت می‌شود.">
         {(p) => <Textarea {...p} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={1000} />}
       </Field>
