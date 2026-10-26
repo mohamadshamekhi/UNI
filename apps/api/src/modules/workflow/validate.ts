@@ -65,6 +65,14 @@ export function validateDefinition(raw: unknown, ctx: ValidationContext): { ok: 
       }
     }
   }
+  // member fields must name an existing role
+  const memberFields = [...def.requestForm.map((f) => ({ f, where: 'requestForm' })), ...def.steps.flatMap((s) => (s.type === 'human' ? s.form.map((f) => ({ f, where: s.id })) : []))].filter(
+    ({ f }) => f.type === 'member',
+  );
+  for (const { f, where } of memberFields) {
+    if (!f.eligibility) issues.push({ code: 'member_eligibility', message: `فیلد «${f.label}» باید نقش مجاز را مشخص کند.`, path: where });
+    else if (!ctx.roleKeys.has(f.eligibility.role)) issues.push({ code: 'unknown_role', message: `نقش «${f.eligibility.role}» در این دانشگاه وجود ندارد.`, path: where });
+  }
   const keys = def.requestForm.map((f) => f.key);
   if (new Set(keys).size !== keys.length) issues.push({ code: 'duplicate_field', message: 'کلید فیلدهای فرم درخواست باید یکتا باشد.', path: 'requestForm' });
 

@@ -101,22 +101,44 @@ export class CasesService implements OnModuleInit {
 
       if (c.applicantMembershipId === me.membershipId) {
         const revision = tasks.find((t) => t.status === 'open' && t.assigneeType === 'applicant');
+        const waiting = tasks.filter((t) => t.status === 'open' && t.assigneeType !== 'applicant');
         return {
           view: 'applicant' as const,
           ...base,
           attachments: attachments(true),
           revisionTaskId: revision?.id ?? null,
+          revision: revision ? { fields: revision.revisionFields, dueAt: revision.dueAt } : null,
+          // THS-06: what the case waits on and until when (no staff identities)
+          waiting: waiting.map((t) => ({ step: stepTitle(def, t.stepId), dueAt: t.dueAt })),
+          // THS-10: whether withdrawal is possible now
+          canWithdraw:
+            c.statusCategory === 'draft' ||
+            c.statusCategory === 'revising' ||
+            (c.statusCategory === 'open' && c.currentSteps.some((id) => { const st = def.steps.find((x) => x.id === id); return st?.type === 'human' && st.allowWithdraw; })),
+          // THS-06: the main path of the definition for a progress stepper
+          path: mainPath(def),
           history: events
             .filter(({ e }) => PUBLIC_EVENTS.has(e.type))
             .map(({ e }) => ({ type: e.type, occurredAt: e.occurredAt, step: stepTitle(def, e.stepId), action: e.action, note: e.publicNote })),
         };
       }
 
+      if (c.statusCategory === 'draft') throw new AppError('NOT_FOUND'); // drafts are private to the applicant
       const canAct = new Map<string, boolean>();
       for (const t of tasks) if (t.status === 'open') canAct.set(t.id, await this.engine.canAct(tx, c, t, me.membershipId));
       const involved = [...canAct.values()].some(Boolean) || tasks.some((t) => t.completedBy === me.userId);
       if (!involved && !(await this.acl.has('case.view.scope', { unitId: c.unitId, caseId: c.id }))) throw new AppError('NOT_FOUND');
 
+      // THS-12: similar titles within the same request type (a hint for the reviewer)
+      const similar = c.title
+        ? (
+            await tx.execute<{ id: string; title: string; status_category: string; score: number }>(sql`
+              select id, title, status_category, round(similarity(title, ${c.title})::numeric, 2)::float as score
+              from cases
+              where request_type = ${c.requestType} and id <> ${c.id} and status_category <> 'draft' and title % ${c.title}
+              order by score desc limit 5`)
+          ).rows
+        : [];
       const [applicant] = await tx
         .select({ fullName: users.fullName, memberNo: memberships.memberNo, kind: memberships.kind })
         .from(memberships)
@@ -127,12 +149,24 @@ export class CasesService implements OnModuleInit {
       return {
         view: 'staff' as const,
         ...base,
+        similarTitles: similar.map((r) => ({ id: r.id, title: r.title, statusCategory: r.status_category, score: r.score })),
         attachments: attachments(false),
         unitId: c.unitId,
         applicant,
         internal: c.internal,
         decisions: c.decisions,
-        steps: currentSteps.map((s) => (s.type === 'human' ? { id: s.id, title: s.title, actions: s.actions, form: s.form } : { id: s.id, title: s.title })),
+        steps: currentSteps.map((s) =>
+          s.type === 'human'
+            ? {
+                id: s.id,
+                title: s.title,
+                actions: s.actions,
+                form: s.form,
+                // actions that send the case back to the applicant (the UI offers targeted revision, THS-07)
+                returnsToApplicant: def.transitions.filter((t) => t.from === s.id && t.to === BUILTIN_APPLICANT && t.action).map((t) => t.action!),
+              }
+            : { id: s.id, title: s.title },
+        ),
         tasks: tasks.map((t) => ({
           id: t.id,
           stepId: t.stepId,
@@ -186,7 +220,7 @@ export class CasesService implements OnModuleInit {
         : sql`(${AclService.unitPredicate(filter, cases.unitId, orgUnits.path)}${filter.caseIds.length ? sql` or ${inArray(cases.id, filter.caseIds)}` : sql``})`;
       const where = and(
         scope,
-        q.statusCategory ? eq(cases.statusCategory, q.statusCategory) : undefined,
+        q.statusCategory ? eq(cases.statusCategory, q.statusCategory) : sql`${cases.statusCategory} <> 'draft'`,
         q.requestType ? eq(cases.requestType, q.requestType) : undefined,
       );
       const items = await this.listRows(tx, where, q.limit, q.offset);
@@ -336,6 +370,26 @@ function fileIdsIn(values: Record<string, unknown>): Set<string> {
   const out = new Set<string>();
   for (const v of Object.values(values)) {
     for (const x of Array.isArray(v) ? v : [v]) if (typeof x === 'string' && UUID.test(x)) out.add(x);
+  }
+  return out;
+}
+
+/** Steps from the start following the first exit of each step: a readable "happy path" for a stepper. */
+function mainPath(def: WorkflowDefinition): { stepId: string; title: string }[] {
+  const out: { stepId: string; title: string }[] = [];
+  const seen = new Set<string>();
+  let cur: string | undefined = def.start;
+  while (cur && !seen.has(cur) && out.length < 20) {
+    seen.add(cur);
+    const step = def.steps.find((s) => s.id === cur);
+    if (!step) break;
+    if (step.type === 'human' || step.type === 'end') out.push({ stepId: step.id, title: step.title });
+    if (step.type === 'parallel') out.push({ stepId: step.id, title: step.title });
+    const exits = def.transitions.filter((t) => t.from === cur && t.to !== BUILTIN_APPLICANT);
+    // prefer the "approve"-like exit, then the otherwise branch of a decision
+    const next =
+      exits.find((t) => t.action && /^(approve|accept|ok|forward)$/.test(t.action)) ?? exits.find((t) => t.otherwise) ?? exits.find((t) => !t.action) ?? exits[0];
+    cur = next?.to;
   }
   return out;
 }

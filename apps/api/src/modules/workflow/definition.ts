@@ -9,12 +9,18 @@ export const BUILTIN_APPLICANT = '@applicant';
 
 export const formFieldSchema = z.object({
   key: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]{0,40}$/),
-  type: z.enum(['text', 'textarea', 'number', 'select', 'date', 'file', 'checkbox']),
+  type: z.enum(['text', 'textarea', 'number', 'select', 'date', 'file', 'checkbox', 'member']),
   label: z.string().min(1).max(120),
   required: z.boolean().default(false),
   options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
   /** internal fields are never shown to the applicant (THS-08) */
   visibility: z.enum(['public', 'internal']).default('public'),
+  /** member fields (THS-02): who may be chosen — holders of `role` covering the case unit */
+  eligibility: z.object({ role: z.string().min(2), scope: z.enum(['tenant', 'case_unit', 'case_unit_tree']).default('case_unit_tree') }).optional(),
+  /** member fields (THS-04): how many open cases one member may hold through this field */
+  capacity: z.object({ default: z.number().int().min(1).max(100) }).optional(),
+  /** member fields: choose several (e.g. reviewers) */
+  multiple: z.boolean().default(false),
 });
 
 export const assigneeSchema = z.union([
@@ -48,10 +54,12 @@ export const stepSchema = z.discriminatedUnion('type', [
     actions: z.array(actionName).min(1).max(8),
     form: z.array(formFieldSchema).max(30).default([]),
     sla: slaSchema.optional(),
+    /** THS-10: the applicant may withdraw while the case waits on this step */
+    allowWithdraw: z.boolean().default(false),
   }),
   z.object({ ...base, type: z.literal('decision') }),
   z.object({ ...base, type: z.literal('parallel'), branches: z.array(id).min(2).max(6), join: z.enum(['all', 'any']).default('all') }),
-  z.object({ ...base, type: z.literal('system'), task: z.enum(['notify', 'request_payment', 'tag']), params: z.record(z.string(), z.unknown()).default({}) }),
+  z.object({ ...base, type: z.literal('system'), task: z.enum(['notify', 'request_payment', 'tag', 'thesis']), params: z.record(z.string(), z.unknown()).default({}) }),
   z.object({ ...base, type: z.literal('end'), outcome: z.enum(['success', 'failure']) }),
 ]);
 
@@ -68,6 +76,10 @@ export const transitionSchema = z
 export const definitionSchema = z.object({
   /** WF-10: what the applicant fills in when starting a case; values land in case.data */
   requestForm: z.array(formFieldSchema).max(30).default([]),
+  /** THS-05/11: per-applicant limits for this request type */
+  limits: z
+    .object({ onePerApplicant: z.boolean().default(false), reapplyAfterDays: z.number().int().min(0).max(3650).default(0) })
+    .default({ onePerApplicant: false, reapplyAfterDays: 0 }),
   start: id,
   steps: z.array(stepSchema).min(2).max(60),
   transitions: z.array(transitionSchema).max(200),

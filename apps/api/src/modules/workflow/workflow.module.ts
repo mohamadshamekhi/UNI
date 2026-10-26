@@ -13,6 +13,6 @@ import { WorkflowsService } from './workflows.service.js';
   imports: [AclModule, FilesModule],
   providers: [WorkflowEngine, CasesService, WorkflowsService, CalendarService, SlaService],
   controllers: [WorkflowAdminController, CasesController, HolidaysController, PlatformHolidaysController],
-  exports: [WorkflowEngine, SlaService],
+  exports: [WorkflowEngine, SlaService, CasesService],
 })
 export class WorkflowModule {}

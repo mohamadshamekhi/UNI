@@ -49,6 +49,10 @@ export const ErrorCodes = {
   WORKFLOW_VERSION_LOCKED: [HttpStatus.CONFLICT, 'نسخه منتشرشده قابل ویرایش نیست؛ نسخه جدید بسازید.'],
   SELECTOR_OVERLAP: [HttpStatus.CONFLICT, 'نسخه منتشرشده دیگری برای همین نوع درخواست و دامنه وجود دارد.'],
   ASSIGNEE_UNRESOLVED: [HttpStatus.BAD_REQUEST, 'مسئول این مرحله از فرایند مشخص نشد.'],
+  CASE_LIMIT: [HttpStatus.CONFLICT, 'درخواست فعال دیگری از همین نوع دارید.'],
+  REAPPLY_TOO_SOON: [HttpStatus.CONFLICT, 'ثبت درخواست جدید پس از رد، هنوز مجاز نیست.'],
+  MEMBER_NOT_ELIGIBLE: [HttpStatus.BAD_REQUEST, 'فرد انتخاب‌شده برای این نقش مجاز نیست.'],
+  MEMBER_CAPACITY_FULL: [HttpStatus.CONFLICT, 'ظرفیت فرد انتخاب‌شده تکمیل است؛ فرد دیگری را انتخاب کنید.'],
   CASE_STALE: [HttpStatus.CONFLICT, 'پرونده هم‌زمان توسط شخص دیگری تغییر کرد؛ صفحه را تازه کنید.'],
 
   INTERNAL: [HttpStatus.INTERNAL_SERVER_ERROR, 'خطای داخلی رخ داد؛ لطفاً دوباره تلاش کنید.'],

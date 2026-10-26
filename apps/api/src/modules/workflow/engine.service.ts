@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { z } from 'zod';
 import { and, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { requestContext } from '../../common/context/request-context.js';
 import { AppError } from '../../common/errors/app-error.js';
@@ -16,7 +17,7 @@ import {
 } from '../../database/schema.js';
 import { FilesService } from '../files/files.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
-import { BUILTIN_APPLICANT, definitionSchema, selectorSchema, type Selector, type Step, type Transition, type WorkflowDefinition } from './definition.js';
+import { BUILTIN_APPLICANT, definitionSchema, formFieldSchema, selectorSchema, type Selector, type Step, type Transition, type WorkflowDefinition } from './definition.js';
 import { evaluateCondition } from './expr.js';
 import { selectorSpecificity } from './validate.js';
 import { dueDate, nextAt, slaSchedule, type WorkCalendar } from './calendar.js';
@@ -66,6 +67,8 @@ export interface ActInput {
   publicNote?: string;
   internalNote?: string;
   expectedVersion?: number;
+  /** with a return to the applicant: fields to fix and days to do it (THS-07) */
+  revision?: { fields?: string[]; deadlineDays?: number };
 }
 
 /** Decision keys exposed to conditions: `case.decisions.review_a` for step `review-a`. */
@@ -77,19 +80,23 @@ const decisionKey = (stepId: string) => stepId.replaceAll('-', '_');
  * containing it) for `case_unit`; the case unit or any ancestor for `case_unit_tree`.
  * `ct` and `c` must be in scope as case_tasks / cases aliases.
  */
-export const roleCoverage = (membershipId: string | SQL) => sql`exists (
+export const memberCoverage = (membership: SQL, roleKey: SQL, scope: SQL, unitId: SQL, caseId: SQL) => sql`exists (
   select 1 from role_assignments ra
-  join roles r on r.id = ra.role_id and r.archived_at is null and r.tenant_id = ct.tenant_id
+  join roles r on r.id = ra.role_id and r.archived_at is null and r.tenant_id = ra.tenant_id
   left join org_units au on au.id = ra.scope_id and ra.scope_type in ('unit', 'unit_tree')
-  left join org_units cu on cu.id = c.unit_id
-  where ra.membership_id = ${membershipId}
+  left join org_units cu on cu.id = ${unitId}
+  where ra.membership_id = ${membership}
     and ra.revoked_at is null and ra.valid_from <= now() and (ra.valid_to is null or ra.valid_to > now())
-    and r.key = ct.role_key
-    and (ct.scope = 'tenant' or ra.scope_type = 'tenant'
-      or (ra.scope_type = 'case' and ra.scope_id = c.id)
-      or (ct.scope = 'case_unit' and ((ra.scope_type = 'unit' and ra.scope_id = c.unit_id)
+    and r.key = ${roleKey}
+    and (${scope} = 'tenant' or ra.scope_type = 'tenant'
+      or (ra.scope_type = 'case' and ra.scope_id = ${caseId})
+      or (${scope} = 'case_unit' and ((ra.scope_type = 'unit' and ra.scope_id = ${unitId})
                                       or (ra.scope_type = 'unit_tree' and cu.path like au.path || '%')))
-      or (ct.scope = 'case_unit_tree' and ra.scope_type in ('unit', 'unit_tree') and cu.path like au.path || '%')))`;
+      or (${scope} = 'case_unit_tree' and ra.scope_type in ('unit', 'unit_tree') and cu.path like au.path || '%')))`;
+
+/** Role task eligibility (WF-01); `ct` and `c` must be case_tasks / cases aliases in scope. */
+export const roleCoverage = (membershipId: string | SQL) =>
+  memberCoverage(typeof membershipId === 'string' ? sql`${membershipId}::uuid` : membershipId, sql`ct.role_key`, sql`ct.scope`, sql`c.unit_id`, sql`c.id`);
 
 /**
  * Workflow runtime (section 7.4): starts cases on the matching published version and moves them
@@ -111,7 +118,7 @@ export class WorkflowEngine {
     return { userId: ctx.userId, membershipId: ctx.membershipId, tenantId: ctx.tenant!.id };
   }
 
-  async start(input: { requestType: string; title?: string; unitId?: string; data?: unknown }): Promise<CaseRow> {
+  async start(input: { requestType: string; title?: string; unitId?: string; data?: unknown; draft?: boolean }): Promise<CaseRow> {
     const actor = this.actor();
     const data = assertCaseData(input.data);
     return this.db.run(async (tx) => {
@@ -121,10 +128,121 @@ export class WorkflowEngine {
 
       const version = await this.pickVersion(tx, input.requestType, { degree: data.degree, unitPath });
       const def = definitionSchema.parse(version.definition);
-      const run = await this.createCase(tx, version.id, def, { requestType: input.requestType, title: input.title, unitId, data, actor });
+      const run = await this.createCase(tx, version.id, def, { requestType: input.requestType, title: input.title, unitId, data, actor, draft: input.draft });
+      if (input.draft) return run.c;
       await this.outbox.emit('case.created', { caseId: run.c.id, requestType: run.c.requestType }, `case.created:${run.c.id}`);
       return run.c;
     });
+  }
+
+  /** THS-01: change a draft (title, data, unit) before it is submitted. */
+  async updateDraft(caseId: string, input: { title?: string; unitId?: string; data?: unknown }): Promise<CaseRow> {
+    const actor = this.actor();
+    return this.db.run(async (tx) => {
+      const c = await this.ownDraft(tx, caseId, actor.membershipId);
+      const unitId = input.unitId ?? c.unitId;
+      if (unitId && unitId !== c.unitId && !(await this.unitPath(tx, unitId))) throw new AppError('UNIT_INVALID');
+      const [u] = await tx
+        .update(cases)
+        .set({ title: input.title ?? c.title, unitId, data: input.data === undefined ? c.data : assertCaseData(input.data), updatedAt: new Date() })
+        .where(eq(cases.id, c.id))
+        .returning();
+      return u!;
+    });
+  }
+
+  /** THS-01: validates the draft against the current version and starts the workflow. */
+  async submit(caseId: string): Promise<CaseRow> {
+    const actor = this.actor();
+    return this.db.run(async (tx) => {
+      const draft = await this.ownDraft(tx, caseId, actor.membershipId);
+      const unitPath = draft.unitId ? await this.unitPath(tx, draft.unitId) : null;
+      // the version is picked again: a newer one may have been published since the draft was saved
+      const version = await this.pickVersion(tx, draft.requestType, { degree: draft.data.degree, unitPath });
+      const def = definitionSchema.parse(version.definition);
+      const data = this.requestData(def, draft.data);
+      const [c] = await tx
+        .update(cases)
+        .set({ workflowVersionId: version.id, data, statusCategory: 'open', submittedAt: new Date(), lockVersion: sql`${cases.lockVersion} + 1`, updatedAt: new Date() })
+        .where(and(eq(cases.id, draft.id), eq(cases.statusCategory, 'draft')))
+        .returning();
+      if (!c) throw new AppError('CASE_STALE');
+      await this.checkSubmission(tx, def, c);
+      await this.linkFiles(c.id, def.requestForm, data, actor.userId);
+      const run = this.newRun(tx, c, def);
+      await this.event(run, { type: 'created' });
+      await this.enter(run, def.start);
+      await this.save(run);
+      await this.outbox.emit('case.created', { caseId: c.id, requestType: c.requestType }, `case.created:${c.id}`);
+      return run.c;
+    });
+  }
+
+  /**
+   * THS-10: the applicant cancels a draft, a case waiting for their revision, or a case whose
+   * current step allows withdrawal.
+   */
+  async withdraw(caseId: string, reason: string): Promise<CaseRow> {
+    const actor = this.actor();
+    return this.db.run(async (tx) => {
+      const [c] = await tx.select().from(cases).where(eq(cases.id, caseId)).limit(1);
+      if (!c || c.applicantMembershipId !== actor.membershipId) throw new AppError('NOT_FOUND');
+      const def = await this.definitionOf(tx, c.workflowVersionId);
+      const allowed =
+        c.statusCategory === 'draft' ||
+        c.statusCategory === 'revising' ||
+        (c.statusCategory === 'open' && c.currentSteps.some((id) => { const st = def.steps.find((x) => x.id === id); return st?.type === 'human' && st.allowWithdraw; }));
+      if (!allowed) throw new AppError('INVALID_STATE_TRANSITION', { reason: 'withdraw_not_allowed' });
+      const bumped = await tx
+        .update(cases)
+        .set({ lockVersion: sql`${cases.lockVersion} + 1` })
+        .where(and(eq(cases.id, c.id), eq(cases.lockVersion, c.lockVersion)))
+        .returning({ lockVersion: cases.lockVersion });
+      if (!bumped.length) throw new AppError('CASE_STALE');
+      const run = this.newRun(tx, { ...c, lockVersion: bumped[0]!.lockVersion }, def);
+      run.c.currentSteps = [];
+      await this.event(run, { type: 'withdrawn', publicNote: reason });
+      await this.close(run, 'cancelled');
+      await this.save(run);
+      return run.c;
+    });
+  }
+
+  /** Candidates for a member field of a request form (applicant side, THS-02/04). */
+  async eligibleForRequest(requestType: string, field: string, unitId?: string, degree?: string) {
+    const actor = this.actor();
+    return this.db.run(async (tx) => {
+      const unit = unitId ?? (await this.primaryUnit(tx, actor.membershipId));
+      const unitPath = unit ? await this.unitPath(tx, unit) : null;
+      const version = await this.pickVersion(tx, requestType, { degree, unitPath });
+      const f = definitionSchema.parse(version.definition).requestForm.find((x) => x.key === field && x.type === 'member');
+      if (!f?.eligibility) throw new AppError('NOT_FOUND');
+      return this.eligible(tx, f, { unitId: unit, applicantMembershipId: actor.membershipId });
+    });
+  }
+
+  /** Candidates for a member field of a step form, for whoever can act on that step now. */
+  async eligibleForStep(caseId: string, stepId: string, field: string) {
+    const actor = this.actor();
+    return this.db.run(async (tx) => {
+      const [c] = await tx.select().from(cases).where(eq(cases.id, caseId)).limit(1);
+      if (!c) throw new AppError('NOT_FOUND');
+      const tasks = await tx.select().from(caseTasks).where(and(eq(caseTasks.caseId, caseId), eq(caseTasks.stepId, stepId), eq(caseTasks.status, 'open')));
+      let can = false;
+      for (const t of tasks) if (await this.canAct(tx, c, t, actor.membershipId)) can = true;
+      if (!can) throw new AppError('FORBIDDEN');
+      const step = (await this.definitionOf(tx, c.workflowVersionId)).steps.find((s) => s.id === stepId);
+      const f = step?.type === 'human' ? step.form.find((x) => x.key === field && x.type === 'member') : undefined;
+      if (!f?.eligibility) throw new AppError('NOT_FOUND');
+      return this.eligible(tx, f, { unitId: c.unitId, caseId: c.id, applicantMembershipId: c.applicantMembershipId });
+    });
+  }
+
+  private async ownDraft(tx: Executor, caseId: string, membershipId: string): Promise<CaseRow> {
+    const [c] = await tx.select().from(cases).where(eq(cases.id, caseId)).limit(1);
+    if (!c || c.applicantMembershipId !== membershipId) throw new AppError('NOT_FOUND');
+    if (c.statusCategory !== 'draft') throw new AppError('INVALID_STATE_TRANSITION');
+    return c;
   }
 
   /** Performs `action` on an open task (WF-04/05). */
@@ -206,14 +324,22 @@ export class WorkflowEngine {
     };
   }
 
-  /** Creates the case row on a given version and runs it to its first waiting step. */
+  /** Creates the case row on a given version and runs it to its first waiting step (or keeps it as a draft). */
   private async createCase(
     tx: Executor,
     versionId: string,
     def: WorkflowDefinition,
-    i: { requestType: string; title?: string; unitId: string | null; data: Record<string, unknown>; actor: { userId: string; membershipId: string; tenantId: string }; sim?: boolean },
+    i: {
+      requestType: string;
+      title?: string;
+      unitId: string | null;
+      data: Record<string, unknown>;
+      actor: { userId: string; membershipId: string; tenantId: string };
+      sim?: boolean;
+      draft?: boolean;
+    },
   ): Promise<Run> {
-    const fields = this.requestData(def, i.data);
+    const fields = i.draft ? i.data : this.requestData(def, i.data);
     const [c] = await tx
       .insert(cases)
       .values({
@@ -224,14 +350,87 @@ export class WorkflowEngine {
         applicantMembershipId: i.actor.membershipId,
         unitId: i.unitId,
         data: fields,
+        statusCategory: i.draft ? 'draft' : 'open',
+        submittedAt: i.draft ? null : new Date(),
       })
       .returning();
-    if (!i.sim) await this.linkFiles(c!.id, def.requestForm, fields, i.actor.userId);
     const run = this.newRun(tx, c!, def);
+    if (i.draft) return run;
+    if (!i.sim) await this.checkSubmission(tx, def, run.c);
+    if (!i.sim) await this.linkFiles(c!.id, def.requestForm, fields, i.actor.userId);
     await this.event(run, { type: 'created' });
     await this.enter(run, def.start);
     await this.save(run);
     return run;
+  }
+
+  /** THS-02/04/05/11: chosen members are eligible and have room; applicant limits hold. */
+  private async checkSubmission(tx: Executor, def: WorkflowDefinition, c: CaseRow) {
+    const active = await tx
+      .select({ id: cases.id })
+      .from(cases)
+      .where(and(eq(cases.applicantMembershipId, c.applicantMembershipId), eq(cases.requestType, c.requestType), inArray(cases.statusCategory, OPEN), sql`${cases.id} <> ${c.id}`))
+      .limit(1);
+    if (def.limits.onePerApplicant && active.length) throw new AppError('CASE_LIMIT', { caseId: active[0]!.id });
+    if (def.limits.reapplyAfterDays > 0) {
+      const [last] = await tx
+        .select({ closedAt: cases.closedAt })
+        .from(cases)
+        .where(and(eq(cases.applicantMembershipId, c.applicantMembershipId), eq(cases.requestType, c.requestType), eq(cases.statusCategory, 'failure')))
+        .orderBy(desc(cases.closedAt))
+        .limit(1);
+      const availableAt = last?.closedAt ? new Date(last.closedAt.getTime() + def.limits.reapplyAfterDays * 86_400_000) : null;
+      if (availableAt && availableAt > new Date()) throw new AppError('REAPPLY_TOO_SOON', { availableAt: availableAt.toISOString() });
+    }
+    await this.checkMembers(tx, def.requestForm, c.data, c);
+  }
+
+  /** Member fields: every chosen member is eligible for the case unit and, with a capacity, not full. */
+  async checkMembers(tx: Executor, fields: z.input<typeof formFieldSchema>[], values: Record<string, unknown>, c: Pick<CaseRow, 'id' | 'applicantMembershipId' | 'unitId'>) {
+    for (const f of fields) {
+      if (f.type !== 'member' || !f.eligibility) continue;
+      const v = values[f.key];
+      const ids = typeof v === 'string' ? [v] : Array.isArray(v) ? (v as string[]) : [];
+      for (const id of ids) {
+        if (id === c.applicantMembershipId) throw new AppError('SEPARATION_OF_DUTIES', { field: f.key });
+        const [row] = await this.eligible(tx, f, { unitId: c.unitId, caseId: c.id, membershipId: id });
+        if (!row) throw new AppError('MEMBER_NOT_ELIGIBLE', { fields: { [f.key]: 'not_eligible' } });
+        if (row.full) throw new AppError('MEMBER_CAPACITY_FULL', { fields: { [f.key]: 'capacity_full' } });
+      }
+    }
+  }
+
+  /**
+   * Members who may be chosen in a member field, with their current load (THS-02/04). Load counts
+   * open cases (other than `caseId`) that name the member in the same field.
+   */
+  eligible(tx: Executor, f: z.input<typeof formFieldSchema>, o: { unitId: string | null; caseId?: string; membershipId?: string; applicantMembershipId?: string }) {
+    const e = f.eligibility!;
+    const key = f.key;
+    return tx
+      .execute<{ membership_id: string; full_name: string; unit_name: string | null; load: number; capacity: number | null; full: boolean }>(
+        sql`
+        select m.id as membership_id, u.full_name, ou.name_fa as unit_name, coalesce(l.load, 0)::int as load, cap.capacity,
+               (cap.capacity is not null and coalesce(l.load, 0) >= cap.capacity) as full
+        from memberships m
+        join users u on u.id = m.user_id
+        left join lateral (select mu.unit_id from membership_units mu where mu.membership_id = m.id order by mu.is_primary desc limit 1) pu on true
+        left join org_units ou on ou.id = pu.unit_id
+        cross join lateral (select ${f.capacity ? sql`coalesce((m.profile->>'supervisionCapacity')::int, ${f.capacity.default})` : sql`null::int`} as capacity) cap
+        left join lateral (
+          select count(*) as load from cases oc
+          where oc.status_category in ('open', 'revising')
+            and oc.id <> ${o.caseId ?? '00000000-0000-0000-0000-000000000000'}
+            and (oc.data->>${key} = m.id::text or (jsonb_typeof(oc.data->${key}) = 'array' and oc.data->${key} ? m.id::text))
+        ) l on true
+        where m.status = 'active'
+          ${o.membershipId ? sql`and m.id = ${o.membershipId}` : sql``}
+          ${o.applicantMembershipId ? sql`and m.id <> ${o.applicantMembershipId}` : sql``}
+          and ${memberCoverage(sql`m.id`, sql`${e.role}`, sql`${e.scope}`, sql`${o.unitId}::uuid`, sql`null::uuid`)}
+        order by u.full_name
+        limit 200`,
+      )
+      .then((r) => r.rows);
   }
 
   /** Applies one action to a claimed task (authorisation already checked by the caller). */
@@ -249,17 +448,24 @@ export class WorkflowEngine {
       } else {
         const patch = assertCaseData(input.data);
         if (def.requestForm.length) {
-        // only request-form fields can be revised; the whole form must still be valid
-        const unknown = Object.keys(patch).filter((k) => !def.requestForm.some((f) => f.key === k));
-        if (unknown.length) throw new AppError('VALIDATION_FAILED', { fields: Object.fromEntries(unknown.map((k) => [k, 'unknown'])) });
-        const merged = { ...run.c.data, ...patch };
-        this.requestData(def, Object.fromEntries(def.requestForm.filter((f) => f.key in merged).map((f) => [f.key, merged[f.key]])));
-        await this.linkFiles(run.c.id, def.requestForm, patch, userId);
+          // only request-form fields can be revised (THS-07: only the requested ones); the form must stay valid
+          const allowed = task.revisionFields.length ? task.revisionFields : def.requestForm.map((f) => f.key);
+          const blocked = Object.keys(patch).filter((k) => !allowed.includes(k));
+          if (blocked.length) {
+            const unknown = (k: string) => !def.requestForm.some((f) => f.key === k);
+            throw new AppError('VALIDATION_FAILED', { fields: Object.fromEntries(blocked.map((k) => [k, unknown(k) ? 'unknown' : 'not_editable'])) });
+          }
+          const merged = { ...run.c.data, ...patch };
+          this.requestData(def, Object.fromEntries(def.requestForm.filter((f) => f.key in merged).map((f) => [f.key, merged[f.key]])));
+          await this.checkMembers(tx, def.requestForm, patch, run.c);
+          if (!sim) await this.linkFiles(run.c.id, def.requestForm, patch, userId);
         }
+        // keep the replaced values so earlier versions stay visible in the history
+        const previous = Object.fromEntries(Object.keys(patch).filter((k) => k in run.c.data).map((k) => [k, run.c.data[k]]));
         run.c.data = { ...run.c.data, ...patch };
         assertCaseData(run.c.data);
         run.c.statusCategory = 'open';
-        await this.event(run, { type: 'resubmitted', stepId: BUILTIN_APPLICANT, publicNote: input.publicNote });
+        await this.event(run, { type: 'resubmitted', stepId: BUILTIN_APPLICANT, publicNote: input.publicNote, form: Object.keys(previous).length ? { previous } : undefined });
         await this.enter(run, task.returnTo!);
       }
     } else {
@@ -267,6 +473,7 @@ export class WorkflowEngine {
       if (!step || step.type !== 'human') throw new AppError('INVALID_STATE_TRANSITION');
       if (!step.actions.includes(input.action)) throw new AppError('VALIDATION_FAILED', { field: 'action' });
       const form = validateForm(step.form, input.form);
+      await this.checkMembers(tx, step.form, { ...form.public, ...form.internal }, run.c);
       if (!sim) await this.linkFiles(run.c.id, step.form, { ...form.public, ...form.internal }, userId);
       run.c.data = { ...run.c.data, ...form.public };
       run.c.internal = { ...run.c.internal, ...form.internal };
@@ -284,7 +491,7 @@ export class WorkflowEngine {
       if (task.parallelOf) await this.join(run, task.parallelOf);
       else {
         const t = this.pick(run, step.id, input.action);
-        await this.follow(run, t, step.id);
+        await this.follow(run, t, step.id, input.revision);
       }
     }
     await this.save(run);
@@ -333,10 +540,14 @@ export class WorkflowEngine {
     return t;
   }
 
-  private async follow(run: Run, t: Transition, from: string): Promise<void> {
+  private async follow(run: Run, t: Transition, from: string, revision?: ActInput['revision']): Promise<void> {
     if (t.to !== BUILTIN_APPLICANT) return this.enter(run, t.to);
-    // return to the applicant for revision; resubmission re-enters the step that sent it back
-    const taskId = await this.createTask(run, { stepId: BUILTIN_APPLICANT, assigneeType: 'applicant', returnTo: from });
+    // return to the applicant for revision; resubmission re-enters the step that sent it back.
+    // THS-07: the reviewer may name the fields to fix and a deadline
+    const keys = new Set(run.def.requestForm.map((f) => f.key));
+    const fields = (revision?.fields ?? []).filter((f) => keys.has(f));
+    const dueAt = revision?.deadlineDays ? new Date(run.now.getTime() + revision.deadlineDays * 86_400_000) : null;
+    const taskId = await this.createTask(run, { stepId: BUILTIN_APPLICANT, assigneeType: 'applicant', returnTo: from, revisionFields: fields, dueAt });
     await this.outbox.emit('case.returned', { caseId: run.c.id, taskId }, `case.returned:${taskId}`);
     run.c.statusCategory = 'revising';
     run.c.currentSteps = [...run.c.currentSteps, BUILTIN_APPLICANT];
@@ -438,7 +649,7 @@ export class WorkflowEngine {
   private async createTask(
     run: Run,
     t: Pick<TaskRow, 'stepId' | 'assigneeType'> &
-      Partial<Pick<TaskRow, 'roleKey' | 'scope' | 'assigneeMembershipId' | 'returnTo' | 'dueAt' | 'slaSchedule' | 'slaNextAt'>> & { parallelOf?: string },
+      Partial<Pick<TaskRow, 'roleKey' | 'scope' | 'assigneeMembershipId' | 'returnTo' | 'dueAt' | 'slaSchedule' | 'slaNextAt' | 'revisionFields'>> & { parallelOf?: string },
   ): Promise<string> {
     const [row] = await run.tx
       .insert(caseTasks)

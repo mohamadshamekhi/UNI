@@ -7,6 +7,7 @@ import {
   date,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   text,
@@ -287,7 +288,7 @@ export const outboxEvents = pgTable('outbox_events', {
 });
 
 export type WorkflowVersionStatus = 'draft' | 'validated' | 'published' | 'retired';
-export type CaseStatusCategory = 'open' | 'revising' | 'success' | 'failure' | 'cancelled';
+export type CaseStatusCategory = 'draft' | 'open' | 'revising' | 'success' | 'failure' | 'cancelled';
 
 export const workflows = pgTable('workflows', {
   id: id(),
@@ -333,6 +334,7 @@ export const cases = pgTable('cases', {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
   closedAt: ts('closed_at'),
+  submittedAt: ts('submitted_at'),
 });
 
 export const caseTasks = pgTable('case_tasks', {
@@ -357,6 +359,7 @@ export const caseTasks = pgTable('case_tasks', {
   overdueAt: ts('overdue_at'),
   escalatedAt: ts('escalated_at'),
   autoExtended: boolean('auto_extended').notNull().default(false),
+  revisionFields: text('revision_fields').array().notNull().default(sql`'{}'`),
 });
 
 export const caseEvents = pgTable('case_events', {
@@ -457,3 +460,26 @@ export const notificationMutes = pgTable(
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.userId, t.channel] })],
 );
+
+export type ThesisStatus = 'proposal' | 'in_progress' | 'defense_scheduled' | 'defended' | 'failed' | 'cancelled';
+
+export const theses = pgTable('theses', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  caseId: uuid('case_id').notNull(),
+  studentMembershipId: uuid('student_membership_id').notNull(),
+  unitId: uuid('unit_id'),
+  titleFa: text('title_fa').notNull(),
+  titleEn: text('title_en'),
+  degree: text('degree'),
+  researchType: text('research_type'),
+  advisorMembershipId: uuid('advisor_membership_id'),
+  coAdvisorMembershipId: uuid('co_advisor_membership_id'),
+  reviewerMembershipIds: uuid('reviewer_membership_ids').array().notNull().default(sql`'{}'`),
+  status: text('status').$type<ThesisStatus>().notNull().default('proposal'),
+  defenseAt: ts('defense_at'),
+  defensePlace: text('defense_place'),
+  grade: numeric('grade', { precision: 4, scale: 2 }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});

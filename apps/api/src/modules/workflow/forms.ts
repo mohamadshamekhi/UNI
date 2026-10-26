@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import { AppError } from '../../common/errors/app-error.js';
 import type { formFieldSchema } from './definition.js';
 
-type FormField = z.infer<typeof formFieldSchema>;
+type FormField = z.input<typeof formFieldSchema>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:\d{2})?)?$/;
@@ -56,6 +56,11 @@ export function validateForm(fields: FormField[], raw: unknown): { public: Recor
         break;
       case 'checkbox':
         ok = typeof v === 'boolean';
+        break;
+      case 'member':
+        ok = f.multiple
+          ? Array.isArray(v) && v.length <= 10 && v.every((x) => typeof x === 'string' && UUID.test(x)) && new Set(v).size === v.length
+          : typeof v === 'string' && UUID.test(v);
         break;
       case 'file':
         ok = (typeof v === 'string' && UUID.test(v)) || (Array.isArray(v) && v.length <= 10 && v.every((x) => typeof x === 'string' && UUID.test(x)));
