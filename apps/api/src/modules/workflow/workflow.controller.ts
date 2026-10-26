@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { RequirePermission, TenantScoped } from '../../common/auth/decorators.js';
 import { PageQuery, ReasonBody } from '../../common/http/dto.js';
 import type { CaseStatusCategory } from '../../database/schema.js';
@@ -20,9 +20,29 @@ class CreateWorkflowBody {
   @IsOptional() @IsString() @MaxLength(1000) description?: string;
 }
 
+class TemplateBody extends CreateWorkflowBody {}
+
+class CopyBody {
+  @Matches(/^[a-z][a-z0-9_-]{1,60}$/) key: string;
+  @IsString() @IsNotEmpty() @MaxLength(120) nameFa: string;
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(20) @IsUUID('all', { each: true }) unitIds: string[];
+}
+
 class VersionBody {
   @IsOptional() @IsObject() definition?: Record<string, unknown>;
   @IsOptional() @IsObject() selector?: Record<string, unknown>;
+}
+
+class SimStepDto {
+  @Matches(/^[a-z][a-z0-9_]{1,30}$/) action: string;
+  @IsOptional() @IsObject() form?: Record<string, unknown>;
+  @IsOptional() @IsObject() data?: Record<string, unknown>;
+}
+
+class SimulateBody {
+  @IsOptional() @IsObject() data?: Record<string, unknown>;
+  @IsOptional() @IsUUID() unitId?: string;
+  @IsArray() @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => SimStepDto) script: SimStepDto[];
 }
 
 class CreateCaseBody {
@@ -74,6 +94,24 @@ export class WorkflowAdminController {
   }
 
   @RequirePermission('workflow.define')
+  @Get('workflow-templates')
+  templates() {
+    return this.workflows.templates();
+  }
+
+  @RequirePermission('workflow.define')
+  @Post('workflow-templates/:key/instantiate')
+  fromTemplate(@Param('key') key: string, @Body() body: TemplateBody) {
+    return this.workflows.fromTemplate(key, body);
+  }
+
+  @RequirePermission('workflow.define')
+  @Post('workflows/:id/copy')
+  copy(@Param('id', ParseUUIDPipe) id: string, @Body() body: CopyBody) {
+    return this.workflows.copy(id, body);
+  }
+
+  @RequirePermission('workflow.define')
   @Get('workflows/:id')
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.workflows.get(id);
@@ -102,6 +140,13 @@ export class WorkflowAdminController {
   @HttpCode(200)
   validate(@Param('id', ParseUUIDPipe) id: string) {
     return this.workflows.validate(id);
+  }
+
+  @RequirePermission('workflow.define')
+  @Post('workflow-versions/:id/simulate')
+  @HttpCode(200)
+  simulate(@Param('id', ParseUUIDPipe) id: string, @Body() body: SimulateBody) {
+    return this.workflows.simulate(id, body);
   }
 
   @RequirePermission('workflow.define')

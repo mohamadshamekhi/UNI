@@ -14,9 +14,11 @@ import {
   workflowVersions,
   type CaseStatusCategory,
 } from '../../database/schema.js';
+import { FilesService } from '../files/files.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { BUILTIN_APPLICANT, definitionSchema, selectorSchema, type Selector, type Step, type Transition, type WorkflowDefinition } from './definition.js';
 import { evaluateCondition } from './expr.js';
+import { selectorSpecificity } from './validate.js';
 import { dueDate, nextAt, slaSchedule, type WorkCalendar } from './calendar.js';
 import { CalendarService } from './calendar.service.js';
 import { assertCaseData, validateForm } from './forms.js';
@@ -39,6 +41,22 @@ interface Run {
   now: Date;
   hops: number;
   cal?: WorkCalendar;
+}
+
+export interface SimStep {
+  action: string;
+  form?: unknown;
+  data?: unknown;
+}
+
+export interface SimResult {
+  ok: boolean;
+  error?: { code: string; message: string; details?: Record<string, unknown> };
+  status: CaseStatusCategory;
+  path: { type: string; step: string | null; action: string | null; toStep: string | null }[];
+  open: { stepId: string; step: string; actions: string[]; form: unknown[]; assignee: string; dueAt: Date | null }[];
+  data: Record<string, unknown>;
+  internal: Record<string, unknown>;
 }
 
 export interface ActInput {
@@ -84,6 +102,7 @@ export class WorkflowEngine {
     private readonly db: DbService,
     private readonly outbox: OutboxService,
     private readonly calendar: CalendarService,
+    private readonly files: FilesService,
   ) {}
 
   private actor() {
@@ -102,23 +121,8 @@ export class WorkflowEngine {
 
       const version = await this.pickVersion(tx, input.requestType, { degree: data.degree, unitPath });
       const def = definitionSchema.parse(version.definition);
-      const [c] = await tx
-        .insert(cases)
-        .values({
-          tenantId: actor.tenantId,
-          workflowVersionId: version.id,
-          requestType: input.requestType,
-          title: input.title ?? null,
-          applicantMembershipId: actor.membershipId,
-          unitId,
-          data,
-        })
-        .returning();
-      const run = this.newRun(tx, c!, def);
-      await this.event(run, { type: 'created' });
-      await this.enter(run, def.start);
-      await this.save(run);
-      await this.outbox.emit('case.created', { caseId: c!.id, requestType: c!.requestType }, `case.created:${c!.id}`);
+      const run = await this.createCase(tx, version.id, def, { requestType: input.requestType, title: input.title, unitId, data, actor });
+      await this.outbox.emit('case.created', { caseId: run.c.id, requestType: run.c.requestType }, `case.created:${run.c.id}`);
       return run.c;
     });
   }
@@ -129,53 +133,183 @@ export class WorkflowEngine {
     return this.db.run(async (tx) => {
       const { c, task } = await this.claim(tx, caseId, taskId, input.expectedVersion);
       await this.assertCanAct(tx, c, task, actor.membershipId);
-      const def = await this.definitionOf(tx, c.workflowVersionId);
-      const run = this.newRun(tx, c, def);
-      await this.completeTask(run, task, input.action, actor.userId);
-
-      if (task.assigneeType === 'applicant') {
-        if (!(APPLICANT_ACTIONS as readonly string[]).includes(input.action)) throw new AppError('VALIDATION_FAILED', { field: 'action' });
-        run.c.currentSteps = run.c.currentSteps.filter((s) => s !== BUILTIN_APPLICANT);
-        if (input.action === 'withdraw') {
-          await this.event(run, { type: 'withdrawn', stepId: BUILTIN_APPLICANT, publicNote: input.publicNote });
-          await this.close(run, 'cancelled');
-        } else {
-          run.c.data = { ...run.c.data, ...assertCaseData(input.data) };
-          assertCaseData(run.c.data);
-          run.c.statusCategory = 'open';
-          await this.event(run, { type: 'resubmitted', stepId: BUILTIN_APPLICANT, publicNote: input.publicNote });
-          await this.enter(run, task.returnTo!);
-        }
-      } else {
-        const step = run.steps.get(task.stepId) as HumanStep | undefined;
-        if (!step || step.type !== 'human') throw new AppError('INVALID_STATE_TRANSITION');
-        if (!step.actions.includes(input.action)) throw new AppError('VALIDATION_FAILED', { field: 'action' });
-        const form = validateForm(step.form, input.form);
-        run.c.data = { ...run.c.data, ...form.public };
-        run.c.internal = { ...run.c.internal, ...form.internal };
-        run.c.decisions = { ...run.c.decisions, [decisionKey(step.id)]: input.action };
-        run.c.currentSteps = run.c.currentSteps.filter((s) => s !== step.id);
-        await this.event(run, {
-          type: 'action',
-          stepId: step.id,
-          action: input.action,
-          publicNote: input.publicNote,
-          internalNote: input.internalNote,
-          form: { ...form.public, ...form.internal },
-        });
-
-        if (task.parallelOf) await this.join(run, task.parallelOf);
-        else {
-          const t = this.pick(run, step.id, input.action);
-          await this.follow(run, t, step.id);
-        }
-      }
-      await this.save(run);
-      return run.c;
+      return this.perform(tx, c, task, input, actor.userId);
     });
   }
 
+  /**
+   * Sandbox run (WF-15): plays a draft version against a simulated case inside a savepoint that
+   * is always rolled back, so nothing is stored and no notification leaves (outbox rows vanish).
+   * Each script entry acts on the first open task offering that action.
+   */
+  async simulate(versionId: string, requestType: string, input: { data?: unknown; unitId?: string; script: SimStep[] }): Promise<SimResult> {
+    const actor = this.actor();
+    const ROLLBACK = new Error('simulation rollback');
+    let result: SimResult | undefined;
+    try {
+      await this.db.savepoint(() =>
+        this.db.run(async (tx) => {
+          const def = await this.definitionOf(tx, versionId);
+          let last: SimResult = { ok: true, status: 'open', path: [], open: [], data: {}, internal: {} };
+          try {
+            const unitId = input.unitId ?? (await this.primaryUnit(tx, actor.membershipId));
+            const run = await this.createCase(tx, versionId, def, { requestType, unitId, data: assertCaseData(input.data), actor, sim: true });
+            last = await this.snapshot(tx, run.c.id, def);
+            for (const st of input.script) {
+              const open = await tx.select().from(caseTasks).where(and(eq(caseTasks.caseId, run.c.id), eq(caseTasks.status, 'open'))).orderBy(caseTasks.createdAt);
+              const task = open.find((t) =>
+                t.assigneeType === 'applicant'
+                  ? (APPLICANT_ACTIONS as readonly string[]).includes(st.action)
+                  : (run.steps.get(t.stepId) as HumanStep | undefined)?.actions.includes(st.action),
+              );
+              if (!task) throw new AppError('INVALID_STATE_TRANSITION', { action: st.action, reason: 'no_open_task' });
+              const claimed = await this.claim(tx, run.c.id, task.id);
+              await this.perform(tx, claimed.c, claimed.task, { action: st.action, form: st.form, data: st.data }, actor.userId, true);
+              last = await this.snapshot(tx, run.c.id, def);
+            }
+            result = last;
+          } catch (e) {
+            if (!(e instanceof AppError)) throw e;
+            result = { ...last, ok: false, error: { code: e.code, message: e.message, details: e.details } };
+          }
+          throw ROLLBACK;
+        }),
+      );
+    } catch (e) {
+      if (e !== ROLLBACK) throw e;
+    }
+    return result!;
+  }
+
+  private async snapshot(tx: Executor, caseId: string, def: WorkflowDefinition): Promise<SimResult> {
+    const title = (id: string | null) => (!id ? null : id === BUILTIN_APPLICANT ? 'اصلاح توسط متقاضی' : (def.steps.find((s) => s.id === id)?.title ?? id));
+    const [c] = await tx.select().from(cases).where(eq(cases.id, caseId));
+    const events = await tx.select().from(caseEvents).where(eq(caseEvents.caseId, caseId)).orderBy(caseEvents.occurredAt);
+    const open = await tx.select().from(caseTasks).where(and(eq(caseTasks.caseId, caseId), eq(caseTasks.status, 'open'))).orderBy(caseTasks.createdAt);
+    return {
+      ok: true,
+      status: c!.statusCategory,
+      path: events.map((e) => ({ type: e.type, step: title(e.stepId), action: e.action, toStep: title(e.toStep) })),
+      open: open.map((t) => {
+        const step = def.steps.find((s) => s.id === t.stepId);
+        return {
+          stepId: t.stepId,
+          step: title(t.stepId)!,
+          actions: t.assigneeType === 'applicant' ? [...APPLICANT_ACTIONS] : step?.type === 'human' ? step.actions : [],
+          form: step?.type === 'human' ? step.form : [],
+          assignee: t.assigneeType === 'role' ? `نقش ${t.roleKey}` : t.assigneeType === 'applicant' ? 'متقاضی' : 'شخص مشخص',
+          dueAt: t.dueAt,
+        };
+      }),
+      data: c!.data,
+      internal: c!.internal,
+    };
+  }
+
+  /** Creates the case row on a given version and runs it to its first waiting step. */
+  private async createCase(
+    tx: Executor,
+    versionId: string,
+    def: WorkflowDefinition,
+    i: { requestType: string; title?: string; unitId: string | null; data: Record<string, unknown>; actor: { userId: string; membershipId: string; tenantId: string }; sim?: boolean },
+  ): Promise<Run> {
+    const fields = this.requestData(def, i.data);
+    const [c] = await tx
+      .insert(cases)
+      .values({
+        tenantId: i.actor.tenantId,
+        workflowVersionId: versionId,
+        requestType: i.requestType,
+        title: i.title ?? null,
+        applicantMembershipId: i.actor.membershipId,
+        unitId: i.unitId,
+        data: fields,
+      })
+      .returning();
+    if (!i.sim) await this.linkFiles(c!.id, def.requestForm, fields, i.actor.userId);
+    const run = this.newRun(tx, c!, def);
+    await this.event(run, { type: 'created' });
+    await this.enter(run, def.start);
+    await this.save(run);
+    return run;
+  }
+
+  /** Applies one action to a claimed task (authorisation already checked by the caller). */
+  private async perform(tx: Executor, c: CaseRow, task: TaskRow, input: ActInput, userId: string, sim = false): Promise<CaseRow> {
+    const def = await this.definitionOf(tx, c.workflowVersionId);
+    const run = this.newRun(tx, c, def);
+    await this.completeTask(run, task, input.action, userId);
+
+    if (task.assigneeType === 'applicant') {
+      if (!(APPLICANT_ACTIONS as readonly string[]).includes(input.action)) throw new AppError('VALIDATION_FAILED', { field: 'action' });
+      run.c.currentSteps = run.c.currentSteps.filter((s) => s !== BUILTIN_APPLICANT);
+      if (input.action === 'withdraw') {
+        await this.event(run, { type: 'withdrawn', stepId: BUILTIN_APPLICANT, publicNote: input.publicNote });
+        await this.close(run, 'cancelled');
+      } else {
+        const patch = assertCaseData(input.data);
+        if (def.requestForm.length) {
+        // only request-form fields can be revised; the whole form must still be valid
+        const unknown = Object.keys(patch).filter((k) => !def.requestForm.some((f) => f.key === k));
+        if (unknown.length) throw new AppError('VALIDATION_FAILED', { fields: Object.fromEntries(unknown.map((k) => [k, 'unknown'])) });
+        const merged = { ...run.c.data, ...patch };
+        this.requestData(def, Object.fromEntries(def.requestForm.filter((f) => f.key in merged).map((f) => [f.key, merged[f.key]])));
+        await this.linkFiles(run.c.id, def.requestForm, patch, userId);
+        }
+        run.c.data = { ...run.c.data, ...patch };
+        assertCaseData(run.c.data);
+        run.c.statusCategory = 'open';
+        await this.event(run, { type: 'resubmitted', stepId: BUILTIN_APPLICANT, publicNote: input.publicNote });
+        await this.enter(run, task.returnTo!);
+      }
+    } else {
+      const step = run.steps.get(task.stepId) as HumanStep | undefined;
+      if (!step || step.type !== 'human') throw new AppError('INVALID_STATE_TRANSITION');
+      if (!step.actions.includes(input.action)) throw new AppError('VALIDATION_FAILED', { field: 'action' });
+      const form = validateForm(step.form, input.form);
+      if (!sim) await this.linkFiles(run.c.id, step.form, { ...form.public, ...form.internal }, userId);
+      run.c.data = { ...run.c.data, ...form.public };
+      run.c.internal = { ...run.c.internal, ...form.internal };
+      run.c.decisions = { ...run.c.decisions, [decisionKey(step.id)]: input.action };
+      run.c.currentSteps = run.c.currentSteps.filter((s) => s !== step.id);
+      await this.event(run, {
+        type: 'action',
+        stepId: step.id,
+        action: input.action,
+        publicNote: input.publicNote,
+        internalNote: input.internalNote,
+        form: { ...form.public, ...form.internal },
+      });
+
+      if (task.parallelOf) await this.join(run, task.parallelOf);
+      else {
+        const t = this.pick(run, step.id, input.action);
+        await this.follow(run, t, step.id);
+      }
+    }
+    await this.save(run);
+    return run.c;
+  }
+
   // ── engine internals ─────────────────────────────────────────────────────
+
+  /** WF-10: with a request form, data must match it (unknown keys rejected); without one, free JSON. */
+  private requestData(def: WorkflowDefinition, data: Record<string, unknown>): Record<string, unknown> {
+    if (!def.requestForm.length) return data;
+    const v = validateForm(def.requestForm, data);
+    return { ...v.public, ...v.internal };
+  }
+
+  /** Attaches files uploaded for file fields to the case (only the actor's own, unlinked uploads). */
+  async linkFiles(caseId: string, fields: { key: string; type: string }[], values: Record<string, unknown>, userId: string) {
+    const ids = fields
+      .filter((f) => f.type === 'file')
+      .flatMap((f) => {
+        const v = values[f.key];
+        return typeof v === 'string' ? [v] : Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+      });
+    if (ids.length) await this.files.link(ids, 'case', caseId, { userId });
+  }
 
   private newRun(tx: Executor, c: CaseRow, def: WorkflowDefinition): Run {
     return { tx, c: { ...c }, def, steps: new Map(def.steps.map((s) => [s.id, s])), now: new Date(), hops: 0 };
@@ -426,7 +560,11 @@ export class WorkflowEngine {
       .innerJoin(workflows, eq(workflows.id, workflowVersions.workflowId))
       .where(and(eq(workflowVersions.status, 'published'), eq(workflows.requestType, requestType), isNull(workflows.archivedAt)))
       .orderBy(desc(workflowVersions.publishedAt));
-    const match = rows.find((r) => selectorMatches(selectorSchema.parse(r.selector), subject));
+    // most specific matching selector wins, then the newest (WF-07)
+    const match = rows
+      .map((r) => ({ r, sel: selectorSchema.parse(r.selector) }))
+      .filter(({ sel }) => selectorMatches(sel, subject))
+      .sort((a, b) => selectorSpecificity(b.sel) - selectorSpecificity(a.sel))[0]?.r;
     if (!match) throw new AppError('WORKFLOW_NOT_AVAILABLE', { requestType });
     return match;
   }

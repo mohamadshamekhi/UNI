@@ -75,6 +75,14 @@ overlap (WF-08); decision steps have exactly one `otherwise`.
   - step form values: `public` fields merge into `data`, `internal` into `case.internal`; the last action per
     step is in `case.decisions.<step_id>` (dashes → underscores) for routing after a join;
   - system steps emit `workflow.<task>` outbox events; end steps close the case and cancel open tasks.
+- **Request form** (WF-10): optional `requestForm` in the definition; case data must match it on start and on
+  revision (only its fields can change). File fields link uploads to the case (`file_objects.linked_type='case'`);
+  the applicant can open files of public fields only, staff what they may see on the case.
+- **Sandbox** (WF-15): `POST /workflow-versions/:id/simulate` runs a script of actions inside a savepoint that is
+  always rolled back; returns the path, waiting steps and data.
+- **Templates / copies** (WF-11/19): built-in templates (`templates.ts`) instantiate as drafts; a copy keeps the
+  request type with a unit selector. The most specific matching selector wins (WF-07), so a faculty copy can be
+  published beside the general version; equally specific overlapping selectors are refused (WF-08).
 - **SLA** (WF-20..24): `due_at` from the tenant calendar (`settings.weekendDays`, default Friday; national
   holidays managed by the platform + university closures, `calendar_holidays`). Each task stores its reminder
   schedule (`sla_schedule`, `sla_next_at`); a one-minute sweep (`SlaService`, row locks with SKIP LOCKED) emits

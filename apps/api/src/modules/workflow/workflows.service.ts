@@ -5,7 +5,9 @@ import { AppError } from '../../common/errors/app-error.js';
 import { DbService, type Executor } from '../../database/db.service.js';
 import { cases, roles, workflows, workflowVersions } from '../../database/schema.js';
 import { AuditService } from '../audit/audit.service.js';
-import { selectorSchema, type Selector } from './definition.js';
+import { definitionSchema, selectorSchema, type Selector } from './definition.js';
+import { WorkflowEngine, type SimStep } from './engine.service.js';
+import { WORKFLOW_TEMPLATES } from './templates.js';
 import { selectorsOverlap, validateDefinition } from './validate.js';
 
 type VersionRow = typeof workflowVersions.$inferSelect;
@@ -29,6 +31,7 @@ export class WorkflowsService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    private readonly engine: WorkflowEngine,
   ) {}
 
   list() {
@@ -50,19 +53,26 @@ export class WorkflowsService {
     );
   }
 
-  /** Request types an applicant can start now: workflows with a published version. */
-  requestTypes() {
-    return this.db.run((tx) =>
+  /** Request types an applicant can start now, with the request form of the latest published version. */
+  async requestTypes() {
+    const rows = await this.db.run((tx) =>
       tx
-        .selectDistinctOn([workflows.requestType], { requestType: workflows.requestType, nameFa: workflows.nameFa, description: workflows.description })
+        .select({ requestType: workflows.requestType, nameFa: workflows.nameFa, description: workflows.description, definition: workflowVersions.definition })
         .from(workflows)
         .innerJoin(workflowVersions, and(eq(workflowVersions.workflowId, workflows.id), eq(workflowVersions.status, 'published')))
         .where(isNull(workflows.archivedAt))
-        .orderBy(workflows.requestType),
+        .orderBy(workflows.requestType, desc(workflowVersions.publishedAt)),
     );
+    const seen = new Set<string>();
+    return rows
+      .filter((r) => !seen.has(r.requestType) && seen.add(r.requestType))
+      .map(({ definition, ...r }) => ({ ...r, requestForm: definitionSchema.safeParse(definition).data?.requestForm ?? [] }));
   }
 
-  async create(input: { key: string; nameFa: string; requestType: string; description?: string }) {
+  async create(
+    input: { key: string; nameFa: string; requestType: string; description?: string },
+    seed: { definition?: unknown; selector?: Omit<Selector, 'requestType'>; source?: Record<string, unknown> } = {},
+  ) {
     const tenantId = requestContext.get().tenant!.id;
     return this.db.run(async (tx) => {
       const [dup] = await tx.select({ id: workflows.id }).from(workflows).where(eq(workflows.key, input.key)).limit(1);
@@ -72,13 +82,45 @@ export class WorkflowsService {
         tenantId,
         workflowId: w!.id,
         version: 1,
-        definition: EMPTY_DEFINITION,
-        selector: { requestType: input.requestType },
+        definition: seed.definition ?? EMPTY_DEFINITION,
+        selector: this.selector(seed.selector ?? {}, input.requestType),
         createdBy: requestContext.get().userId,
       });
-      await this.audit.record({ action: 'workflow.created', targetType: 'workflow', targetId: w!.id, after: input });
+      await this.audit.record({ action: 'workflow.created', targetType: 'workflow', targetId: w!.id, after: { ...input, ...seed.source } });
       return w!;
     });
+  }
+
+  /** WF-11: built-in templates to start from. */
+  templates() {
+    return WORKFLOW_TEMPLATES.map(({ definition, ...t }) => {
+      const steps = (definition as { steps: unknown[] }).steps.length;
+      return { ...t, steps };
+    });
+  }
+
+  fromTemplate(templateKey: string, input: { key: string; nameFa: string; requestType: string; description?: string }) {
+    const t = WORKFLOW_TEMPLATES.find((x) => x.key === templateKey);
+    if (!t) throw new AppError('NOT_FOUND');
+    return this.create(input, { definition: structuredClone(t.definition), source: { template: t.key } });
+  }
+
+  /**
+   * WF-19: a faculty-specific copy — same request type, latest definition, selector limited to the
+   * given units so it never overlaps the source when both are published.
+   */
+  async copy(id: string, input: { key: string; nameFa: string; unitIds: string[] }) {
+    const [src, latest] = await this.db.run(async (tx) => {
+      const [w] = await tx.select().from(workflows).where(eq(workflows.id, id)).limit(1);
+      if (!w) throw new AppError('NOT_FOUND');
+      const [v] = await tx.select().from(workflowVersions).where(eq(workflowVersions.workflowId, id)).orderBy(desc(workflowVersions.version)).limit(1);
+      return [w, v!] as const;
+    });
+    const selector = selectorSchema.parse(latest.selector);
+    return this.create(
+      { key: input.key, nameFa: input.nameFa, requestType: src.requestType, description: src.description ?? undefined },
+      { definition: latest.definition, selector: { degrees: selector.degrees, unitIds: input.unitIds }, source: { copiedFrom: { workflowId: id, version: latest.version } } },
+    );
   }
 
   async get(id: string) {
@@ -155,6 +197,16 @@ export class WorkflowsService {
         await tx.update(workflowVersions).set({ issues: result.issues, status: result.ok ? 'validated' : 'draft' }).where(eq(workflowVersions.id, id));
       }
       return { ok: result.ok, issues: result.issues };
+    });
+  }
+
+  /** WF-15: sandbox run of any version (usually a draft); the definition must be valid first. */
+  async simulate(id: string, input: { data?: unknown; unitId?: string; script: SimStep[] }) {
+    return this.db.run(async (tx) => {
+      const v = await this.version(tx, id);
+      const check = await this.check(tx, v);
+      if (!check.ok) return { ok: false, issues: check.issues };
+      return this.engine.simulate(v.id, await this.requestTypeOf(tx, v.workflowId), input);
     });
   }
 

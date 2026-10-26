@@ -66,6 +66,8 @@ export const transitionSchema = z
   .refine((t) => !(t.when && t.otherwise), 'a transition cannot have both when and otherwise');
 
 export const definitionSchema = z.object({
+  /** WF-10: what the applicant fills in when starting a case; values land in case.data */
+  requestForm: z.array(formFieldSchema).max(30).default([]),
   start: id,
   steps: z.array(stepSchema).min(2).max(60),
   transitions: z.array(transitionSchema).max(200),

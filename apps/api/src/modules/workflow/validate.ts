@@ -56,6 +56,18 @@ export function validateDefinition(raw: unknown, ctx: ValidationContext): { ok: 
     }
   });
 
+  // dynamic assignees read a request-form field (or a public step field) holding a membership id
+  if (def.requestForm.length) {
+    const declared = new Set([...def.requestForm.map((f) => f.key), ...def.steps.flatMap((s) => (s.type === 'human' ? s.form.filter((f) => f.visibility === 'public').map((f) => f.key) : []))]);
+    for (const s of def.steps) {
+      if (s.type === 'human' && 'dynamic' in s.assignee && !declared.has(s.assignee.dynamic.slice('data.'.length))) {
+        issues.push({ code: 'undeclared_path', message: `فیلد «${s.assignee.dynamic}» در فرم درخواست تعریف نشده است.`, path: s.id });
+      }
+    }
+  }
+  const keys = def.requestForm.map((f) => f.key);
+  if (new Set(keys).size !== keys.length) issues.push({ code: 'duplicate_field', message: 'کلید فیلدهای فرم درخواست باید یکتا باشد.', path: 'requestForm' });
+
   // branch steps of a parallel never route on their own: the parallel's single exit does (join)
   const branchIds = new Set(def.steps.flatMap((s) => (s.type === 'parallel' ? s.branches : [])));
   for (const s of def.steps) {
@@ -143,9 +155,17 @@ export function validateDefinition(raw: unknown, ctx: ValidationContext): { ok: 
   return { ok: issues.length === 0, issues, definition: def };
 }
 
-/** WF-08: two published versions must not both match the same request. */
+/** How narrow a selector is: each restricted dimension counts once. */
+export const selectorSpecificity = (s: Selector) => (s.degrees?.length ? 1 : 0) + (s.unitIds?.length ? 1 : 0);
+
+/**
+ * WF-08: two published versions must not both match the same request with the same
+ * specificity. A narrower selector (e.g. one faculty) may sit beside a general one; the
+ * runtime picks the most specific match (WF-07).
+ */
 export function selectorsOverlap(a: Selector, b: Selector): boolean {
   if (a.requestType !== b.requestType) return false;
+  if (selectorSpecificity(a) !== selectorSpecificity(b)) return false;
   const overlap = (x?: string[], y?: string[]) => !x?.length || !y?.length || x.some((v) => y.includes(v));
   return overlap(a.degrees, b.degrees) && overlap(a.unitIds, b.unitIds);
 }

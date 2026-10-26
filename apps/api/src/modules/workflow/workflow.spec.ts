@@ -4,6 +4,8 @@ import { selectorsOverlap, validateDefinition } from './validate.js';
 import { selectorMatches } from './engine.service.js';
 import { dueDate, slaSchedule } from './calendar.js';
 import { validateForm } from './forms.js';
+import { WORKFLOW_TEMPLATES } from './templates.js';
+import { ROLE_TEMPLATES } from '../acl/permissions.catalog.js';
 
 describe('condition language (WF-03)', () => {
   const scope = { data: { degree: 'phd', score: 17, tags: ['a', 'b'], needsCommittee: false }, case: { round: 2 }, actor: {} };
@@ -83,7 +85,10 @@ describe('definition validation (WF-14)', () => {
   });
 
   it('flags overlapping selectors (WF-08)', () => {
-    expect(selectorsOverlap({ requestType: 'thesis' }, { requestType: 'thesis', degrees: ['msc'] })).toBe(true);
+    // a narrower selector may coexist with a general one (most specific wins at runtime)
+    expect(selectorsOverlap({ requestType: 'thesis' }, { requestType: 'thesis', degrees: ['msc'] })).toBe(false);
+    expect(selectorsOverlap({ requestType: 'thesis' }, { requestType: 'thesis' })).toBe(true);
+    expect(selectorsOverlap({ requestType: 'thesis', degrees: ['msc', 'phd'] }, { requestType: 'thesis', degrees: ['phd'] })).toBe(true);
     expect(selectorsOverlap({ requestType: 'thesis', degrees: ['phd'] }, { requestType: 'thesis', degrees: ['msc'] })).toBe(false);
     expect(selectorsOverlap({ requestType: 'thesis' }, { requestType: 'paper' })).toBe(false);
   });
@@ -143,5 +148,12 @@ describe('forms, SLA and selectors', () => {
     expect(validateDefinition(def, { roleKeys: new Set(['expert']) }).issues).toEqual([]);
     const bad = { ...def, transitions: [...def.transitions, { from: 'aa', action: 'ok', to: 'end' }] };
     expect(validateDefinition(bad, { roleKeys: new Set(['expert']) }).issues.map((i) => i.code)).toContain('branch_transition');
+  });
+});
+
+describe('workflow templates (WF-11)', () => {
+  it.each(WORKFLOW_TEMPLATES.map((t) => [t.key, t]))('%s is valid against the default roles', (_, t) => {
+    const r = validateDefinition(t.definition, { roleKeys: new Set(ROLE_TEMPLATES.map((x) => x.key)) });
+    expect(r.issues).toEqual([]);
   });
 });

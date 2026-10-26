@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { requestContext } from '../../common/context/request-context.js';
 import { AppError } from '../../common/errors/app-error.js';
@@ -6,6 +6,7 @@ import { DbService, type Executor } from '../../database/db.service.js';
 import { caseEvents, cases, caseTasks, memberships, orgUnits, users, workflows, workflowVersions, type CaseStatusCategory } from '../../database/schema.js';
 import { AclService } from '../acl/acl.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { FilesService } from '../files/files.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { nextAt, slaSchedule } from './calendar.js';
 import { BUILTIN_APPLICANT, definitionSchema, type WorkflowDefinition } from './definition.js';
@@ -18,14 +19,36 @@ const stepTitle = (def: WorkflowDefinition, id: string | null) =>
   !id ? null : id === BUILTIN_APPLICANT ? 'اصلاح توسط متقاضی' : (def.steps.find((s) => s.id === id)?.title ?? id);
 
 @Injectable()
-export class CasesService {
+export class CasesService implements OnModuleInit {
   constructor(
     private readonly db: DbService,
     private readonly acl: AclService,
     private readonly audit: AuditService,
     private readonly engine: WorkflowEngine,
     private readonly outbox: OutboxService,
+    private readonly files: FilesService,
   ) {}
+
+  /** Case attachments: the applicant reads files of public fields; staff read what they may see on the case. */
+  onModuleInit() {
+    this.files.registerAccessResolver('case', async (file) => {
+      const ctx = requestContext.find();
+      if (!ctx?.membershipId || !ctx.userId) return false;
+      return this.db.run(async (tx) => {
+        const [c] = await tx.select().from(cases).where(eq(cases.id, file.linkedId!)).limit(1);
+        if (!c) return false;
+        if (c.applicantMembershipId === ctx.membershipId) return fileIdsIn(c.data).has(file.id);
+        const tasks = await tx.select().from(caseTasks).where(eq(caseTasks.caseId, c.id));
+        return this.staffCanView(tx, c, tasks, { membershipId: ctx.membershipId!, userId: ctx.userId! });
+      });
+    });
+  }
+
+  private async staffCanView(tx: Executor, c: CaseRow, tasks: (typeof caseTasks.$inferSelect)[], me: { membershipId: string; userId: string }) {
+    if (tasks.some((t) => t.completedBy === me.userId)) return true;
+    for (const t of tasks) if (t.status === 'open' && (await this.engine.canAct(tx, c, t, me.membershipId))) return true;
+    return this.acl.has('case.view.scope', { unitId: c.unitId, caseId: c.id });
+  }
 
   private me() {
     const ctx = requestContext.get();
@@ -62,13 +85,26 @@ export class CasesService {
         closedAt: c.closedAt,
         data: c.data,
         current: c.currentSteps.map((s) => ({ stepId: s, title: stepTitle(def, s) })),
+        // labels for data keys: request form first, then step fields
+        labels: Object.fromEntries(
+          [...def.requestForm, ...def.steps.flatMap((s) => (s.type === 'human' ? s.form : []))].map((f) => [f.key, f.label]),
+        ),
+        requestForm: def.requestForm,
       };
+
+      const linked = await this.files.listLinked('case', c.id);
+      const fieldOf = new Map<string, string>();
+      for (const [k, v] of [...Object.entries(c.data), ...Object.entries(c.internal)]) for (const id of fileIdsIn({ [k]: v })) fieldOf.set(id, k);
+      const publicIds = fileIdsIn(c.data);
+      const attachments = (onlyPublic: boolean) =>
+        linked.filter((f) => !onlyPublic || publicIds.has(f.id)).map((f) => ({ ...f, field: fieldOf.get(f.id) ?? null }));
 
       if (c.applicantMembershipId === me.membershipId) {
         const revision = tasks.find((t) => t.status === 'open' && t.assigneeType === 'applicant');
         return {
           view: 'applicant' as const,
           ...base,
+          attachments: attachments(true),
           revisionTaskId: revision?.id ?? null,
           history: events
             .filter(({ e }) => PUBLIC_EVENTS.has(e.type))
@@ -91,6 +127,7 @@ export class CasesService {
       return {
         view: 'staff' as const,
         ...base,
+        attachments: attachments(false),
         unitId: c.unitId,
         applicant,
         internal: c.internal,
@@ -290,4 +327,15 @@ export class CasesService {
     const me = this.me();
     await tx.insert(caseEvents).values({ tenantId: c.tenantId, caseId: c.id, actorUserId: me.userId, actorMembershipId: me.membershipId, ...e });
   }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** File ids referenced by form values (single id or list). */
+function fileIdsIn(values: Record<string, unknown>): Set<string> {
+  const out = new Set<string>();
+  for (const v of Object.values(values)) {
+    for (const x of Array.isArray(v) ? v : [v]) if (typeof x === 'string' && UUID.test(x)) out.add(x);
+  }
+  return out;
 }
