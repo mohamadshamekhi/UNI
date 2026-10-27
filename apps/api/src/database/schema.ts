@@ -483,3 +483,129 @@ export const theses = pgTable('theses', {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+export type ReviewMode = 'open' | 'single_blind' | 'double_blind';
+export type PaperStatus =
+  | 'draft'
+  | 'submitted'
+  | 'under_review'
+  | 'reviews_done'
+  | 'revision_requested'
+  | 'revised'
+  | 'accepted_conditional'
+  | 'accepted'
+  | 'rejected'
+  | 'withdrawn';
+export type ReviewStatus = 'invited' | 'accepted' | 'declined' | 'submitted' | 'cancelled';
+export type Recommendation = 'accept' | 'accept_conditional' | 'minor_revision' | 'major_revision' | 'reject';
+
+export const paperTracks = pgTable('paper_tracks', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  nameFa: text('name_fa').notNull(),
+  description: text('description'),
+  reviewMode: text('review_mode').$type<ReviewMode>().notNull(),
+  maxRounds: integer('max_rounds').notNull().default(3),
+  reviewerDays: integer('reviewer_days').notNull().default(14),
+  minReviewers: integer('min_reviewers').notNull().default(2),
+  reviewerDownload: boolean('reviewer_download').notNull().default(true),
+  active: boolean('active').notNull().default(true),
+  createdAt: createdAt(),
+});
+
+export interface CoAuthor {
+  fullName: string;
+  membershipId?: string;
+  affiliation?: string;
+}
+
+export const papers = pgTable('papers', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  trackId: uuid('track_id').notNull(),
+  trackingCode: text('tracking_code'),
+  authorMembershipId: uuid('author_membership_id').notNull(),
+  managerMembershipId: uuid('manager_membership_id'),
+  reviewMode: text('review_mode').$type<ReviewMode>().notNull(),
+  title: text('title').notNull(),
+  abstract: text('abstract'),
+  keywords: text('keywords').array().notNull().default(sql`'{}'`),
+  degree: text('degree').notNull(),
+  field: text('field'),
+  coAuthors: jsonb('co_authors').$type<CoAuthor[]>().notNull().default([]),
+  conflicts: jsonb('conflicts').$type<{ membershipIds?: string[]; note?: string }>().notNull().default({}),
+  status: text('status').$type<PaperStatus>().notNull().default('draft'),
+  round: integer('round').notNull().default(0),
+  revisionDueAt: ts('revision_due_at'),
+  decision: text('decision'),
+  decisionNote: text('decision_note'),
+  lockVersion: integer('lock_version').notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+  submittedAt: ts('submitted_at'),
+  decidedAt: ts('decided_at'),
+});
+
+export const paperVersions = pgTable('paper_versions', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  paperId: uuid('paper_id').notNull(),
+  round: integer('round').notNull(),
+  originalFileId: uuid('original_file_id').notNull(),
+  reviewFileId: uuid('review_file_id'),
+  scrubReport: jsonb('scrub_report').$type<Record<string, unknown>>().notNull().default({}),
+  responseLetter: text('response_letter'),
+  responseFileId: uuid('response_file_id'),
+  createdAt: createdAt(),
+});
+
+export const paperGuests = pgTable('paper_guests', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  fullName: text('full_name').notNull(),
+  mobile: text('mobile'),
+  email: text('email'),
+  tokenHash: text('token_hash').notNull(),
+  tokenUsedAt: ts('token_used_at'),
+  expiresAt: ts('expires_at').notNull(),
+  revokedAt: ts('revoked_at'),
+  createdBy: uuid('created_by'),
+  createdAt: createdAt(),
+});
+
+export const paperReviews = pgTable('paper_reviews', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  paperId: uuid('paper_id').notNull(),
+  round: integer('round').notNull(),
+  reviewerMembershipId: uuid('reviewer_membership_id'),
+  guestId: uuid('guest_id'),
+  aliasNo: integer('alias_no').notNull(),
+  status: text('status').$type<ReviewStatus>().notNull().default('invited'),
+  dueAt: ts('due_at').notNull(),
+  invitedAt: ts('invited_at').notNull().defaultNow(),
+  respondedAt: ts('responded_at'),
+  submittedAt: ts('submitted_at'),
+  declineReason: text('decline_reason'),
+  recommendation: text('recommendation').$type<Recommendation>(),
+  commentsToAuthor: text('comments_to_author'),
+  confidentialComments: text('confidential_comments'),
+  scores: jsonb('scores').$type<Record<string, number>>().notNull().default({}),
+  attachmentFileId: uuid('attachment_file_id'),
+  conflictsAcknowledged: jsonb('conflicts_acknowledged').$type<string[] | null>(),
+  remindedAt: ts('reminded_at'),
+});
+
+export const paperEvents = pgTable('paper_events', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  paperId: uuid('paper_id').notNull(),
+  occurredAt: ts('occurred_at').notNull().defaultNow(),
+  actorUserId: uuid('actor_user_id'),
+  actorGuestId: uuid('actor_guest_id'),
+  type: text('type').notNull(),
+  round: integer('round').notNull(),
+  audience: text('audience').$type<'all' | 'author' | 'reviewers' | 'managers'>().notNull(),
+  note: text('note'),
+  data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
+});

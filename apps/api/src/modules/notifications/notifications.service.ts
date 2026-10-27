@@ -36,7 +36,24 @@ const DIRECT: NotificationEvent[] = [
   'case.returned',
   'case.closed',
   'case.task.escalated',
+  'paper.submitted',
+  'paper.review.invited',
+  'paper.review.reminder',
+  'paper.review.declined',
+  'paper.reviews_done',
+  'paper.revision_requested',
+  'paper.revised',
+  'paper.decided',
+  'paper.withdrawn',
 ];
+
+const PAPER_DECISION: Record<string, string> = {
+  accept: 'پذیرفته شد',
+  accept_conditional: 'پذیرش مشروط',
+  reject: 'رد شد',
+  minor_revision: 'اصلاح جزئی',
+  major_revision: 'اصلاح اساسی',
+};
 
 const OUTCOME: Record<string, string> = { success: 'تأیید شد', failure: 'رد شد', cancelled: 'لغو شد' };
 
@@ -200,6 +217,8 @@ export class NotificationsService implements OnModuleInit, OnApplicationBootstra
       };
     }
 
+    if (event.startsWith('paper.')) return this.paperContext(event, tenantId, t, timeZone, p);
+
     const caseId = p.caseId as string;
     const [c] = await db
       .select({ id: cases.id, title: cases.title, statusCategory: cases.statusCategory, applicant: memberships.userId, applicantMembership: cases.applicantMembershipId, workflowName: workflows.nameFa, definition: workflowVersions.definition })
@@ -234,6 +253,57 @@ export class NotificationsService implements OnModuleInit, OnApplicationBootstra
       ctx.recipients.assignee = await this.assignees(taskId);
       if (event.startsWith('case.task.reminder.')) ctx.dedupe = `${taskId}:${dayIn(new Date(), timeZone)}`;
     }
+    return ctx;
+  }
+
+  /** Paper events: author, the invited reviewer (members only; guests get their link directly), managers. */
+  private async paperContext(event: NotificationEvent, tenantId: string, t: { nameFa: string; slug: string }, timeZone: string, p: Record<string, unknown>): Promise<Context | null> {
+    const db = this.db.sys;
+    const res = await db.execute<{ id: string; tracking_code: string | null; title: string; author_user: string; due: Date | null; revision_due_at: Date | null }>(sql`
+      select pa.id, pa.tracking_code, pa.title, m.user_id as author_user, null::timestamptz as due, pa.revision_due_at
+      from papers pa join memberships m on m.id = pa.author_membership_id where pa.id = ${p.paperId as string}`);
+    const paper = res.rows[0];
+    if (!paper) return null;
+    const ctx: Context = {
+      tenantId,
+      timeZone,
+      vars: {
+        tenantName: t.nameFa,
+        trackingCode: paper.tracking_code ?? '',
+        paperTitle: paper.title,
+        dueDate: faDate(paper.revision_due_at ? new Date(paper.revision_due_at) : null, timeZone),
+        decisionLabel: PAPER_DECISION[(p.decision as string) ?? ''] ?? '',
+      },
+      recipients: { author: [paper.author_user] },
+      links: { author: `/${t.slug}/papers/${paper.id}`, managers: `/t/${t.slug}/papers/${paper.id}` },
+    };
+    if (p.reviewId) {
+      const r = (
+        await db.execute<{ user_id: string | null; due_at: Date }>(sql`
+          select m.user_id, r.due_at from paper_reviews r left join memberships m on m.id = r.reviewer_membership_id where r.id = ${p.reviewId as string}`)
+      ).rows[0];
+      if (r) {
+        ctx.vars.dueDate = faDate(new Date(r.due_at), timeZone);
+        ctx.recipients.reviewer = r.user_id ? [r.user_id] : [];
+        ctx.links.reviewer = `/t/${t.slug}/reviews/${p.reviewId as string}`;
+        if (event === 'paper.review.reminder') ctx.dedupe = `${p.reviewId as string}:${p.kind as string}`;
+      }
+    }
+    if (Array.isArray(p.reviewIds) && p.reviewIds.length) {
+      const rows = (
+        await db.execute<{ user_id: string }>(sql`
+          select m.user_id from paper_reviews r join memberships m on m.id = r.reviewer_membership_id where r.id in (${sql.join((p.reviewIds as string[]).map((id) => sql`${id}::uuid`), sql`, `)})`)
+      ).rows;
+      ctx.recipients.released_reviewers = rows.map((x) => x.user_id);
+    }
+    // review managers: everyone holding paper.screen or paper.decide in this tenant
+    ctx.recipients.managers = (
+      await db.execute<{ user_id: string }>(sql`
+        select distinct m.user_id from role_assignments ra
+        join role_permissions rp on rp.role_id = ra.role_id and rp.permission_code in ('paper.screen', 'paper.decide')
+        join memberships m on m.id = ra.membership_id and m.status = 'active'
+        where ra.tenant_id = ${tenantId} and ra.revoked_at is null and ra.valid_from <= now() and (ra.valid_to is null or ra.valid_to > now())`)
+    ).rows.map((x) => x.user_id);
     return ctx;
   }
 

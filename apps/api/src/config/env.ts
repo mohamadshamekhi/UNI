@@ -8,6 +8,8 @@ const schema = z.object({
   LOG_LEVEL: z.string().default('info'),
   CORS_ORIGINS: z.string().default(''),
   TENANT_BASE_DOMAIN: z.string().default('uni.localhost'),
+  /** public portal origin, for links sent outside the apps (guest reviewer invitations) */
+  PORTAL_URL: z.string().url().default('http://localhost:3000'),
 
   DATABASE_URL: z.string().url(),
   DATABASE_SYSTEM_URL: z.string().url(),

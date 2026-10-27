@@ -46,7 +46,8 @@ export class FilesController {
     @Ctx() ctx: RequestContext,
   ) {
     if (!file) throw new AppError('VALIDATION_FAILED', { field: 'file' });
-    if (!isUploadPurpose(body.purpose)) throw new AppError('VALIDATION_FAILED', { field: 'purpose' });
+    // review copies are produced by the server from the author's manuscript, never uploaded
+    if (!isUploadPurpose(body.purpose) || body.purpose === 'paper_review_copy') throw new AppError('VALIDATION_FAILED', { field: 'purpose' });
     let owner: { ownerUserId?: string; uploadSubject?: string };
     if (body.purpose === 'branding_logo') await this.acl.assert('tenant.settings.edit');
     if (ctx.userId) {

@@ -23,6 +23,7 @@ import { OrgModule } from './modules/org/org.module.js';
 import { OutboxModule } from './modules/outbox/outbox.module.js';
 import { TenancyModule } from './modules/tenancy/tenancy.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
+import { PapersModule } from './modules/papers/papers.module.js';
 import { ThesisModule } from './modules/thesis/thesis.module.js';
 import { WorkflowModule } from './modules/workflow/workflow.module.js';
 import { TenantResolverMiddleware } from './modules/tenancy/tenant-resolver.middleware.js';
@@ -59,6 +60,7 @@ const env = loadEnv();
     WorkflowModule,
     NotificationsModule,
     ThesisModule,
+    PapersModule,
     MaintenanceModule,
   ],
   controllers: [HealthController],

@@ -4,7 +4,7 @@ import type { NotificationChannel } from '../../database/schema.js';
 // default, the variables a template may use and the default Persian texts. Tenants override
 // rules and templates in the database; the catalog itself only changes with the code.
 
-export type Recipient = 'user' | 'applicant' | 'assignee';
+export type Recipient = 'user' | 'applicant' | 'assignee' | 'author' | 'reviewer' | 'managers' | 'released_reviewers';
 
 export interface VarDef {
   label: string;
@@ -34,6 +34,8 @@ const caseVars = {
   caseTitle: { label: 'عنوان پرونده', sensitive: true },
 };
 const taskVars = { ...caseVars, stepTitle: { label: 'عنوان مرحله' }, dueDate: { label: 'مهلت' } };
+
+const paperVars = { ...tenant, trackingCode: { label: 'شناسه پیگیری' }, paperTitle: { label: 'عنوان مقاله', sensitive: true }, dueDate: { label: 'مهلت' } };
 
 export const CATALOG = {
   'membership.invited': {
@@ -133,6 +135,94 @@ export const CATALOG = {
     templates: {
       inapp: { subject: 'پرونده با تأخیر به شما ارجاع شد', body: 'پرونده {{caseRef}} در مرحله «{{stepTitle}}» پس از گذشت مهلت به شما ارجاع شد.' },
       sms: { body: '{{tenantName}}: پرونده {{caseRef}} پس از گذشت مهلت به شما ارجاع شد.' },
+    },
+  },
+  // Paper review (section 9): no template ever names the other side (identity matrix, NTF-08)
+  'paper.submitted': {
+    label: 'ثبت مقاله',
+    critical: false,
+    vars: paperVars,
+    rules: [
+      { recipient: 'author', channels: ['inapp', 'sms'] },
+      { recipient: 'managers', channels: ['inapp'] },
+    ],
+    templates: {
+      inapp: { subject: 'مقاله ثبت شد: {{trackingCode}}', body: 'مقاله «{{paperTitle}}» با شناسه پیگیری {{trackingCode}} ثبت شد و در صف بررسی اولیه است.' },
+      sms: { body: '{{tenantName}}: مقاله شما با شناسه پیگیری {{trackingCode}} ثبت شد.' },
+    },
+  },
+  'paper.review.invited': {
+    label: 'دعوت به داوری',
+    critical: false,
+    vars: paperVars,
+    rules: [{ recipient: 'reviewer', channels: ['inapp', 'sms'] }],
+    templates: {
+      inapp: { subject: 'دعوت به داوری مقاله', body: 'برای داوری مقاله «{{paperTitle}}» دعوت شده‌اید؛ لطفاً تا {{dueDate}} پاسخ و نظر خود را ثبت کنید.' },
+      sms: { body: '{{tenantName}}: دعوت به داوری یک مقاله؛ مهلت {{dueDate}}. لطفاً وارد سامانه شوید.' },
+    },
+  },
+  'paper.review.reminder': {
+    label: 'یادآوری مهلت داوری',
+    critical: true,
+    vars: paperVars,
+    rules: [{ recipient: 'reviewer', channels: ['inapp', 'sms'] }],
+    templates: {
+      inapp: { subject: 'یادآوری داوری', body: 'مهلت داوری مقاله «{{paperTitle}}» {{dueDate}} است.' },
+      sms: { body: '{{tenantName}}: یادآوری مهلت داوری مقاله ({{dueDate}}).' },
+    },
+  },
+  'paper.review.declined': {
+    label: 'رد دعوت داوری',
+    critical: false,
+    vars: paperVars,
+    rules: [{ recipient: 'managers', channels: ['inapp'] }],
+    templates: { inapp: { subject: 'دعوت داوری رد شد: {{trackingCode}}', body: 'یکی از داوران دعوت مقاله {{trackingCode}} را نپذیرفت؛ داور جایگزین انتخاب کنید.' } },
+  },
+  'paper.reviews_done': {
+    label: 'تکمیل داوری‌ها',
+    critical: false,
+    vars: paperVars,
+    rules: [{ recipient: 'managers', channels: ['inapp'] }],
+    templates: { inapp: { subject: 'داوری‌ها کامل شد: {{trackingCode}}', body: 'نظر داوران مقاله {{trackingCode}} ثبت شد و منتظر تصمیم است.' } },
+  },
+  'paper.revision_requested': {
+    label: 'درخواست اصلاح مقاله',
+    critical: false,
+    vars: paperVars,
+    rules: [{ recipient: 'author', channels: ['inapp', 'sms'] }],
+    templates: {
+      inapp: { subject: 'اصلاح مقاله {{trackingCode}}', body: 'اصلاح مقاله «{{paperTitle}}» خواسته شده است؛ نسخه جدید را تا {{dueDate}} ارسال کنید.' },
+      sms: { body: '{{tenantName}}: اصلاح مقاله {{trackingCode}} خواسته شده؛ مهلت {{dueDate}}.' },
+    },
+  },
+  'paper.revised': {
+    label: 'ارسال نسخه اصلاح‌شده',
+    critical: false,
+    vars: paperVars,
+    rules: [{ recipient: 'managers', channels: ['inapp'] }],
+    templates: { inapp: { subject: 'نسخه اصلاح‌شده: {{trackingCode}}', body: 'نسخه جدید مقاله {{trackingCode}} رسید و آماده دور بعد داوری است.' } },
+  },
+  'paper.decided': {
+    label: 'تصمیم نهایی مقاله',
+    critical: false,
+    vars: { ...paperVars, decisionLabel: { label: 'تصمیم' } },
+    rules: [{ recipient: 'author', channels: ['inapp', 'sms'] }],
+    templates: {
+      inapp: { subject: 'تصمیم درباره مقاله {{trackingCode}}', body: 'تصمیم نهایی درباره مقاله «{{paperTitle}}»: {{decisionLabel}}.' },
+      sms: { body: '{{tenantName}}: تصمیم نهایی مقاله {{trackingCode}}: {{decisionLabel}}.' },
+    },
+  },
+  'paper.withdrawn': {
+    label: 'انصراف نویسنده',
+    critical: false,
+    vars: paperVars,
+    rules: [
+      { recipient: 'released_reviewers', channels: ['inapp', 'sms'] },
+      { recipient: 'managers', channels: ['inapp'] },
+    ],
+    templates: {
+      inapp: { subject: 'مقاله از داوری خارج شد', body: 'مقاله «{{paperTitle}}» توسط نویسنده پس گرفته شد؛ داوری آن لازم نیست.' },
+      sms: { body: '{{tenantName}}: مقاله‌ای که داوری آن به شما سپرده شده بود پس گرفته شد.' },
     },
   },
 } as const satisfies Record<string, EventDef>;

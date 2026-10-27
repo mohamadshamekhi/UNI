@@ -19,6 +19,8 @@ export interface RequestContext {
   tenantRequested?: string;
   membershipId?: string;
   membershipStatus?: string;
+  /** Guest reviewer session (PAP-11): no user account, one tenant, one reviewer. */
+  guestId?: string;
   /** Active transaction for this request (RLS settings applied). */
   tx?: Tx;
 }

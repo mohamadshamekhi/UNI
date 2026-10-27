@@ -53,6 +53,9 @@ export const ErrorCodes = {
   REAPPLY_TOO_SOON: [HttpStatus.CONFLICT, 'ثبت درخواست جدید پس از رد، هنوز مجاز نیست.'],
   MEMBER_NOT_ELIGIBLE: [HttpStatus.BAD_REQUEST, 'فرد انتخاب‌شده برای این نقش مجاز نیست.'],
   MEMBER_CAPACITY_FULL: [HttpStatus.CONFLICT, 'ظرفیت فرد انتخاب‌شده تکمیل است؛ فرد دیگری را انتخاب کنید.'],
+  CONFLICT_OF_INTEREST: [HttpStatus.CONFLICT, 'تضاد منافع احتمالی وجود دارد؛ پس از بررسی، آن را تأیید کنید.'],
+  MAX_ROUNDS_REACHED: [HttpStatus.CONFLICT, 'سقف دورهای داوری این مقاله پر شده است؛ تصمیم نهایی را ثبت کنید.'],
+  GUEST_LINK_INVALID: [HttpStatus.FORBIDDEN, 'لینک داوری نامعتبر، منقضی یا قبلاً استفاده شده است.'],
   CASE_STALE: [HttpStatus.CONFLICT, 'پرونده هم‌زمان توسط شخص دیگری تغییر کرد؛ صفحه را تازه کنید.'],
 
   INTERNAL: [HttpStatus.INTERNAL_SERVER_ERROR, 'خطای داخلی رخ داد؛ لطفاً دوباره تلاش کنید.'],

@@ -41,6 +41,24 @@ export const UPLOAD_POLICIES = {
   branding_logo: { mimes: ['image/png', 'image/jpeg'], maxBytes: 1 * MB, confidential: false },
   /** step form attachments (workflow cases) */
   case_attachment: { mimes: ['application/pdf', 'image/jpeg', 'image/png'], maxBytes: 20 * MB, confidential: true },
+  /** PAP-01: manuscripts and revised versions */
+  paper_manuscript: {
+    mimes: ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+    maxBytes: 30 * MB,
+    confidential: true,
+  },
+  /** scrubbed review copy, written by the server only */
+  paper_review_copy: {
+    mimes: ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+    maxBytes: 30 * MB,
+    confidential: true,
+  },
+  /** reviewer attachment (annotated manuscript, report) */
+  paper_review_attachment: {
+    mimes: ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/png', 'image/jpeg'],
+    maxBytes: 20 * MB,
+    confidential: true,
+  },
 } as const satisfies Record<string, UploadPolicy>;
 
 export type UploadPurpose = keyof typeof UPLOAD_POLICIES;

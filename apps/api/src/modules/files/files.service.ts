@@ -143,6 +143,16 @@ export class FilesService implements OnApplicationBootstrap, OnModuleDestroy {
     if (Number(used?.bytes ?? 0) + incoming > quota) throw new AppError('FILE_QUOTA_EXCEEDED', { quotaBytes: quota });
   }
 
+  /** Raw bytes of a stored file (server-side processing such as manuscript scrubbing). */
+  async read(file: FileRow): Promise<Buffer> {
+    return this.storage.getBuffer(file.storageKey);
+  }
+
+  /** Stream of a stored file for routes that do their own access checks (guest reviewers). */
+  stream(file: FileRow) {
+    return this.storage.get(file.storageKey);
+  }
+
   /** Background scan (FIL-04); infected files stay quarantined and are never served. */
   async scan(fileId: string) {
     const [file] = await this.db.sys.select().from(fileObjects).where(eq(fileObjects.id, fileId));
