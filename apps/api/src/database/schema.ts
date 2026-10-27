@@ -609,3 +609,157 @@ export const paperEvents = pgTable('paper_events', {
   note: text('note'),
   data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
 });
+
+export interface Audience {
+  public?: boolean;
+  members?: boolean;
+  units?: { id: string; tree?: boolean }[];
+  roles?: string[];
+  memberships?: string[];
+}
+
+export type NewsStatus = 'draft' | 'pending_approval' | 'approved' | 'scheduled' | 'published' | 'archived' | 'deleted';
+
+export const newsChannels = pgTable('news_channels', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  nameFa: text('name_fa').notNull(),
+  description: text('description'),
+  unitId: uuid('unit_id'),
+  policy: text('policy').$type<'direct' | 'single' | 'multi'>().notNull().default('single'),
+  approvalsRequired: integer('approvals_required').notNull().default(1),
+  active: boolean('active').notNull().default(true),
+  createdAt: createdAt(),
+});
+
+export const newsChannelMembers = pgTable(
+  'news_channel_members',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    channelId: uuid('channel_id').notNull(),
+    membershipId: uuid('membership_id').notNull(),
+    role: text('role').$type<'author' | 'approver' | 'publisher'>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.channelId, t.membershipId, t.role] })],
+);
+
+export const newsPosts = pgTable('news_posts', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  channelId: uuid('channel_id').notNull(),
+  slug: text('slug').notNull(),
+  title: text('title').notNull(),
+  summary: text('summary'),
+  bodyHtml: text('body_html').notNull().default(''),
+  coverFileId: uuid('cover_file_id'),
+  attachmentFileIds: uuid('attachment_file_ids').array().notNull().default(sql`'{}'`),
+  category: text('category'),
+  tags: text('tags').array().notNull().default(sql`'{}'`),
+  source: text('source'),
+  authorMembershipId: uuid('author_membership_id').notNull(),
+  status: text('status').$type<NewsStatus>().notNull().default('draft'),
+  audience: jsonb('audience').$type<Audience>().notNull().default({ public: true }),
+  publishAt: ts('publish_at'),
+  expireAt: ts('expire_at'),
+  publishedAt: ts('published_at'),
+  archivedAt: ts('archived_at'),
+  deletedAt: ts('deleted_at'),
+  unpublishReason: text('unpublish_reason'),
+  notifyAudience: boolean('notify_audience').notNull().default(false),
+  version: integer('version').notNull().default(1),
+  lockVersion: integer('lock_version').notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const newsPostVersions = pgTable('news_post_versions', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  postId: uuid('post_id').notNull(),
+  version: integer('version').notNull(),
+  snapshot: jsonb('snapshot').$type<Record<string, unknown>>().notNull(),
+  createdBy: uuid('created_by'),
+  createdAt: createdAt(),
+});
+
+export const newsApprovals = pgTable('news_approvals', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  postId: uuid('post_id').notNull(),
+  version: integer('version').notNull(),
+  approverMembershipId: uuid('approver_membership_id').notNull(),
+  decision: text('decision').$type<'approve' | 'return'>().notNull(),
+  note: text('note'),
+  createdAt: createdAt(),
+});
+
+export const newsEvents = pgTable('news_events', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  postId: uuid('post_id').notNull(),
+  occurredAt: ts('occurred_at').notNull().defaultNow(),
+  actorUserId: uuid('actor_user_id'),
+  type: text('type').notNull(),
+  version: integer('version').notNull(),
+  note: text('note'),
+});
+
+export type EventStatus = 'draft' | 'published' | 'registration_open' | 'registration_closed' | 'held' | 'cancelled';
+export type RegistrationStatus = 'registered' | 'pending' | 'approved' | 'rejected' | 'cancelled' | 'waitlisted';
+
+export interface RegistrationRule {
+  members?: boolean;
+  roles?: string[];
+  units?: { id: string; tree?: boolean }[];
+  tenants?: string[];
+  authenticated?: boolean;
+}
+
+export const events = pgTable('events', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  title: text('title').notNull(),
+  descriptionHtml: text('description_html').notNull().default(''),
+  category: text('category'),
+  organizer: text('organizer'),
+  organizerUnitId: uuid('organizer_unit_id'),
+  startsAt: ts('starts_at').notNull(),
+  endsAt: ts('ends_at').notNull(),
+  location: text('location'),
+  onlineUrl: text('online_url'),
+  coverFileId: uuid('cover_file_id'),
+  status: text('status').$type<EventStatus>().notNull().default('draft'),
+  visibility: text('visibility').$type<'own_tenant' | 'selected_tenants' | 'public'>().notNull().default('own_tenant'),
+  visibleTenantIds: uuid('visible_tenant_ids').array().notNull().default(sql`'{}'`),
+  registrationRule: jsonb('registration_rule').$type<RegistrationRule>().notNull().default({ members: true }),
+  capacity: integer('capacity'),
+  waitlist: boolean('waitlist').notNull().default(false),
+  registrationDeadline: ts('registration_deadline'),
+  requiresApproval: boolean('requires_approval').notNull().default(false),
+  allowCancel: boolean('allow_cancel').notNull().default(true),
+  form: jsonb('form').$type<unknown[]>().notNull().default([]),
+  feeAmount: bigint('fee_amount', { mode: 'number' }),
+  certificateEnabled: boolean('certificate_enabled').notNull().default(false),
+  paperTrackId: uuid('paper_track_id'),
+  newsPostId: uuid('news_post_id'),
+  createdBy: uuid('created_by'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const eventRegistrations = pgTable('event_registrations', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  eventId: uuid('event_id').notNull(),
+  userId: uuid('user_id').notNull(),
+  homeTenantId: uuid('home_tenant_id'),
+  membershipId: uuid('membership_id'),
+  status: text('status').$type<RegistrationStatus>().notNull(),
+  answers: jsonb('answers').$type<Record<string, unknown>>().notNull().default({}),
+  code: text('code').notNull(),
+  attendedAt: ts('attended_at'),
+  decidedAt: ts('decided_at'),
+  cancelledAt: ts('cancelled_at'),
+  createdAt: createdAt(),
+});

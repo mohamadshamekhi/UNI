@@ -27,8 +27,8 @@ export class OutboxService implements OnApplicationBootstrap, OnModuleDestroy {
     this.handlers.set(type, [...(this.handlers.get(type) ?? []), handler]);
   }
 
-  async emit(type: string, payload: Record<string, unknown>, idempotencyKey: string) {
-    const tenantId = requestContext.find()?.tenant?.id ?? null;
+  /** `tenantId` overrides the request tenant (cross-tenant writes such as event registrations). */
+  async emit(type: string, payload: Record<string, unknown>, idempotencyKey: string, tenantId: string | null = requestContext.find()?.tenant?.id ?? null) {
     await this.db.run((tx) =>
       tx.insert(outboxEvents).values({ tenantId, type, payload, idempotencyKey }).onConflictDoNothing(),
     );

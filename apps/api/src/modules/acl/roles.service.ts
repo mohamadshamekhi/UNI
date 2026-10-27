@@ -62,6 +62,12 @@ export class RolesService implements OnApplicationBootstrap {
         await tx.delete(rolePermissions).where(eq(rolePermissions.roleId, id));
         await tx.insert(rolePermissions).values(t.permissions.map((permissionCode) => ({ roleId: id, permissionCode })));
       }
+      // a university admin holds every tenant permission by definition: tenant copies get permissions added in later releases
+      await tx.execute(sql`
+        insert into role_permissions (role_id, tenant_id, permission_code)
+        select r.id, r.tenant_id, p.code from roles r cross join unnest(${`{${TENANT_PERMISSIONS.join(',')}}`}::text[]) as p(code)
+        where r.tenant_id is not null and r.template_key = 'university_admin' and r.archived_at is null
+        on conflict do nothing`);
     });
     this.logger.log(`ACL catalog synced: ${Object.keys(PERMISSIONS).length} permissions, ${ROLE_TEMPLATES.length} templates`);
   }

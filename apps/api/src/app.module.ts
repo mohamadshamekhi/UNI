@@ -24,6 +24,7 @@ import { OutboxModule } from './modules/outbox/outbox.module.js';
 import { TenancyModule } from './modules/tenancy/tenancy.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { PapersModule } from './modules/papers/papers.module.js';
+import { NewsModule } from './modules/news/news.module.js';
 import { ThesisModule } from './modules/thesis/thesis.module.js';
 import { WorkflowModule } from './modules/workflow/workflow.module.js';
 import { TenantResolverMiddleware } from './modules/tenancy/tenant-resolver.middleware.js';
@@ -61,6 +62,7 @@ const env = loadEnv();
     NotificationsModule,
     ThesisModule,
     PapersModule,
+    NewsModule,
     MaintenanceModule,
   ],
   controllers: [HealthController],

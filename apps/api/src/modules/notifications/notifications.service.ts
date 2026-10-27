@@ -45,7 +45,23 @@ const DIRECT: NotificationEvent[] = [
   'paper.revised',
   'paper.decided',
   'paper.withdrawn',
+  'news.submitted',
+  'news.returned',
+  'news.published',
+  'event.registered',
+  'event.registration.decided',
+  'event.promoted',
+  'event.cancelled',
 ];
+
+const REG_STATUS: Record<string, string> = {
+  registered: 'قطعی شد',
+  pending: 'در انتظار تأیید برگزارکننده است',
+  approved: 'تأیید شد',
+  rejected: 'رد شد',
+  waitlisted: 'در فهرست انتظار است',
+  cancelled: 'لغو شد',
+};
 
 const PAPER_DECISION: Record<string, string> = {
   accept: 'پذیرفته شد',
@@ -218,6 +234,8 @@ export class NotificationsService implements OnModuleInit, OnApplicationBootstra
     }
 
     if (event.startsWith('paper.')) return this.paperContext(event, tenantId, t, timeZone, p);
+    if (event.startsWith('news.')) return this.newsContext(tenantId, t, timeZone, p);
+    if (event.startsWith('event.')) return this.eventContext(tenantId, t, timeZone, p);
 
     const caseId = p.caseId as string;
     const [c] = await db
@@ -304,6 +322,84 @@ export class NotificationsService implements OnModuleInit, OnApplicationBootstra
         join memberships m on m.id = ra.membership_id and m.status = 'active'
         where ra.tenant_id = ${tenantId} and ra.revoked_at is null and ra.valid_from <= now() and (ra.valid_to is null or ra.valid_to > now())`)
     ).rows.map((x) => x.user_id);
+    return ctx;
+  }
+
+  /**
+   * News events. `audience` is resolved with the post's own audience rule, so a restricted post is
+   * never announced to someone who could not open it (phase 5 gate).
+   */
+  private async newsContext(tenantId: string, t: { nameFa: string; slug: string }, timeZone: string, p: Record<string, unknown>): Promise<Context | null> {
+    const db = this.db.sys;
+    const post = (
+      await db.execute<{ id: string; slug: string; title: string; channel_id: string; channel_name: string; author_user: string; status: string }>(sql`
+        select np.id, np.slug, np.title, np.channel_id, nc.name_fa as channel_name, m.user_id as author_user, np.status
+        from news_posts np join news_channels nc on nc.id = np.channel_id join memberships m on m.id = np.author_membership_id
+        where np.id = ${p.postId as string} and np.tenant_id = ${tenantId}`)
+    ).rows[0];
+    if (!post) return null;
+    const ctx: Context = {
+      tenantId,
+      timeZone,
+      vars: { tenantName: t.nameFa, postTitle: post.title, channelName: post.channel_name },
+      recipients: { author: [post.author_user] },
+      links: { author: `/t/${t.slug}/news/${post.id}`, channel_approvers: `/t/${t.slug}/news/${post.id}`, audience: `/${t.slug}/news/${post.slug}` },
+    };
+    ctx.recipients.channel_approvers = (
+      await db.execute<{ user_id: string }>(sql`
+        select distinct m.user_id from memberships m
+        where m.tenant_id = ${tenantId} and m.status = 'active' and m.user_id <> ${post.author_user} and (
+          exists (select 1 from news_channel_members cm where cm.channel_id = ${post.channel_id} and cm.membership_id = m.id and cm.role in ('approver', 'publisher'))
+          or exists (select 1 from role_assignments ra join role_permissions rp on rp.role_id = ra.role_id and rp.permission_code in ('news.approve', 'news.publish')
+                     where ra.membership_id = m.id and ra.scope_type = 'tenant' and ra.revoked_at is null and ra.valid_from <= now() and (ra.valid_to is null or ra.valid_to > now())))
+        limit 500`)
+    ).rows.map((x) => x.user_id);
+    if (post.status === 'published') {
+      ctx.recipients.audience = (
+        await db.execute<{ user_id: string }>(sql`
+          select distinct m.user_id from memberships m, news_posts np
+          where np.id = ${post.id} and m.tenant_id = ${tenantId} and m.status = 'active' and (
+            coalesce((np.audience->>'public')::boolean, false)
+            or coalesce((np.audience->>'members')::boolean, false)
+            or coalesce(np.audience->'memberships', '[]'::jsonb) ? m.id::text
+            or exists (
+              select 1 from role_assignments ra join roles r on r.id = ra.role_id and r.archived_at is null
+              where ra.membership_id = m.id and ra.revoked_at is null and ra.valid_from <= now() and (ra.valid_to is null or ra.valid_to > now())
+                and coalesce(np.audience->'roles', '[]'::jsonb) ? r.key)
+            or exists (
+              select 1 from jsonb_array_elements(coalesce(np.audience->'units', '[]'::jsonb)) au
+              join org_units target on target.id = (au->>'id')::uuid
+              join membership_units mu on mu.membership_id = m.id
+              join org_units mine on mine.id = mu.unit_id
+              where mine.id = target.id or (coalesce((au->>'tree')::boolean, false) and mine.path like target.path || '%')))
+          limit 5000`)
+      ).rows.map((x) => x.user_id);
+    }
+    return ctx;
+  }
+
+  /** Event registrations: the registrant (who may belong to another university), or all registrants. */
+  private async eventContext(tenantId: string, t: { nameFa: string; slug: string }, timeZone: string, p: Record<string, unknown>): Promise<Context | null> {
+    const db = this.db.sys;
+    const ev = (await db.execute<{ id: string; title: string; starts_at: Date }>(sql`select id, title, starts_at from events where id = ${p.eventId as string} and tenant_id = ${tenantId}`)).rows[0];
+    if (!ev) return null;
+    const ctx: Context = {
+      tenantId,
+      timeZone,
+      vars: { tenantName: t.nameFa, eventTitle: ev.title, eventDate: faDate(new Date(ev.starts_at), timeZone), statusLabel: '', reason: (p.reason as string) ?? '' },
+      recipients: {},
+      links: { registrant: `/${t.slug}/events/${ev.id}`, registrants: `/${t.slug}/events/${ev.id}` },
+    };
+    if (p.registrationId) {
+      const r = (await db.execute<{ user_id: string; status: string }>(sql`select user_id, status from event_registrations where id = ${p.registrationId as string}`)).rows[0];
+      if (!r) return null;
+      ctx.recipients.registrant = [r.user_id];
+      ctx.vars.statusLabel = REG_STATUS[r.status] ?? '';
+    } else {
+      ctx.recipients.registrants = (
+        await db.execute<{ user_id: string }>(sql`select distinct user_id from event_registrations where event_id = ${ev.id} and status in ('registered', 'pending', 'approved', 'waitlisted') limit 5000`)
+      ).rows.map((x) => x.user_id);
+    }
     return ctx;
   }
 

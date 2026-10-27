@@ -4,7 +4,7 @@ import type { NotificationChannel } from '../../database/schema.js';
 // default, the variables a template may use and the default Persian texts. Tenants override
 // rules and templates in the database; the catalog itself only changes with the code.
 
-export type Recipient = 'user' | 'applicant' | 'assignee' | 'author' | 'reviewer' | 'managers' | 'released_reviewers';
+export type Recipient = 'user' | 'applicant' | 'assignee' | 'author' | 'reviewer' | 'managers' | 'released_reviewers' | 'audience' | 'channel_approvers' | 'registrant' | 'registrants';
 
 export interface VarDef {
   label: string;
@@ -37,7 +37,69 @@ const taskVars = { ...caseVars, stepTitle: { label: 'عنوان مرحله' }, d
 
 const paperVars = { ...tenant, trackingCode: { label: 'شناسه پیگیری' }, paperTitle: { label: 'عنوان مقاله', sensitive: true }, dueDate: { label: 'مهلت' } };
 
+const newsVars = { ...tenant, postTitle: { label: 'عنوان خبر', sensitive: true }, channelName: { label: 'کانال' } };
+const eventVars = { ...tenant, eventTitle: { label: 'عنوان رویداد' }, eventDate: { label: 'تاریخ رویداد' }, statusLabel: { label: 'وضعیت ثبت‌نام' }, reason: { label: 'دلیل', sensitive: true } };
+
 export const CATALOG = {
+  'news.submitted': {
+    label: 'ارسال خبر برای تأیید',
+    critical: false,
+    vars: newsVars,
+    rules: [{ recipient: 'channel_approvers', channels: ['inapp'] }],
+    templates: { inapp: { subject: 'خبر در انتظار تأیید', body: 'خبر «{{postTitle}}» در کانال {{channelName}} برای تأیید ارسال شده است.' } },
+  },
+  'news.returned': {
+    label: 'برگشت خبر برای اصلاح',
+    critical: false,
+    vars: newsVars,
+    rules: [{ recipient: 'author', channels: ['inapp'] }],
+    templates: { inapp: { subject: 'خبر برای اصلاح برگشت', body: 'خبر «{{postTitle}}» برای اصلاح به شما برگردانده شد.' } },
+  },
+  'news.published': {
+    label: 'انتشار خبر برای مخاطبان',
+    critical: false,
+    vars: newsVars,
+    // NWS-13: in-app only by default (SMS to a whole audience is costly)
+    rules: [{ recipient: 'audience', channels: ['inapp'] }],
+    templates: { inapp: { subject: 'خبر تازه: {{postTitle}}', body: 'خبر «{{postTitle}}» در {{channelName}} منتشر شد.' } },
+  },
+  'event.registered': {
+    label: 'ثبت‌نام در رویداد',
+    critical: false,
+    vars: eventVars,
+    rules: [{ recipient: 'registrant', channels: ['inapp'] }],
+    templates: { inapp: { subject: 'ثبت‌نام رویداد: {{eventTitle}}', body: 'ثبت‌نام شما در «{{eventTitle}}» ({{eventDate}}) انجام شد؛ وضعیت: {{statusLabel}}.' } },
+  },
+  'event.registration.decided': {
+    label: 'نتیجه بررسی ثبت‌نام',
+    critical: false,
+    vars: eventVars,
+    rules: [{ recipient: 'registrant', channels: ['inapp', 'sms'] }],
+    templates: {
+      inapp: { subject: 'نتیجه ثبت‌نام: {{eventTitle}}', body: 'ثبت‌نام شما در «{{eventTitle}}» {{statusLabel}}.' },
+      sms: { body: '{{tenantName}}: ثبت‌نام شما در رویداد «{{eventTitle}}» {{statusLabel}}.' },
+    },
+  },
+  'event.promoted': {
+    label: 'خروج از فهرست انتظار',
+    critical: false,
+    vars: eventVars,
+    rules: [{ recipient: 'registrant', channels: ['inapp', 'sms'] }],
+    templates: {
+      inapp: { subject: 'جای شما در رویداد باز شد', body: 'با آزاد شدن ظرفیت، ثبت‌نام شما در «{{eventTitle}}» ({{eventDate}}) {{statusLabel}}.' },
+      sms: { body: '{{tenantName}}: ظرفیت رویداد «{{eventTitle}}» برای شما باز شد.' },
+    },
+  },
+  'event.cancelled': {
+    label: 'لغو رویداد',
+    critical: true,
+    vars: eventVars,
+    rules: [{ recipient: 'registrants', channels: ['inapp', 'sms'] }],
+    templates: {
+      inapp: { subject: 'رویداد لغو شد: {{eventTitle}}', body: 'رویداد «{{eventTitle}}» ({{eventDate}}) لغو شد. {{reason}}' },
+      sms: { body: '{{tenantName}}: رویداد «{{eventTitle}}» ({{eventDate}}) لغو شد.' },
+    },
+  },
   'membership.invited': {
     label: 'دعوت به سامانه',
     critical: true,

@@ -25,6 +25,8 @@ export const PERMISSIONS = {
   'news.create': { module: 'news', description: 'ایجاد خبر' },
   'news.approve': { module: 'news', description: 'تأیید خبر' },
   'news.publish': { module: 'news', description: 'انتشار خبر' },
+  'news.unpublish': { module: 'news', description: 'لغو انتشار فوری خبر' },
+  'news.manage': { module: 'news', description: 'مدیریت کانال‌های خبری و منتشرکنندگان' },
   'event.manage': { module: 'events', description: 'مدیریت رویداد' },
   'event.register': { module: 'events', description: 'ثبت‌نام در رویداد' },
   'report.view': { module: 'reporting', description: 'مشاهده گزارش‌ها' },
