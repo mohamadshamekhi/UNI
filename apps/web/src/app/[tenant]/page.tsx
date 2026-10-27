@@ -3,7 +3,7 @@
 import type React from "react";
 
 import { toFaDigits } from "@uni/shared/format";
-import { ArrowLeft, BadgeCheck, BookOpenText, CalendarDays, Check, FileSearch, GraduationCap, LogIn, Presentation, Smartphone, Sparkles, Upload, UserRoundCheck } from "lucide-react";
+import { ArrowLeft, BadgeCheck, BookOpenText, CalendarDays, Check, FileSearch, GraduationCap, LogIn, Newspaper, Presentation, Smartphone, Upload, UserRoundCheck } from "lucide-react";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { CountUp, Reveal } from "@/components/site/reveal";
@@ -33,10 +33,11 @@ const AUDIENCES = [
   },
 ];
 
-const MODULES: Record<string, { icon: typeof BadgeCheck; title: string; text: string; tint: string }> = {
-  thesis: { icon: BookOpenText, title: "پایان‌نامه و رساله", text: "ثبت پیشنهاده و پیگیری مرحله‌به‌مرحله تا دفاع.", tint: "#7c3aed" },
-  paper: { icon: FileSearch, title: "مقاله و داوری علمی", text: "ارسال مقاله و داوری یک‌سو یا دوسو ناشناس.", tint: "#0f766e" },
-  events: { icon: CalendarDays, title: "همایش‌ها و رویدادها", text: "ثبت‌نام در رویدادها و ارسال مقاله به همایش.", tint: "#b45309" },
+const MODULES: Record<string, { icon: typeof BadgeCheck; title: string; text: string; tint: string; path: string }> = {
+  thesis: { icon: BookOpenText, title: "پایان‌نامه و رساله", text: "ثبت پیشنهاده و پیگیری مرحله‌به‌مرحله تا دفاع.", tint: "#7c3aed", path: "thesis" },
+  paper: { icon: FileSearch, title: "مقاله و داوری علمی", text: "ارسال مقاله، داوری یک‌سو یا دوسو ناشناس و پیگیری تصمیم.", tint: "#0f766e", path: "papers" },
+  events: { icon: CalendarDays, title: "همایش‌ها و رویدادها", text: "مشاهده همایش‌ها و رویدادها و ثبت‌نام آنلاین.", tint: "#b45309", path: "events" },
+  news: { icon: Newspaper, title: "اخبار و اطلاعیه‌ها", text: "خبرهای عمومی دانشگاه و اطلاعیه‌های ویژه گروه شما.", tint: "#2f6bff", path: "news" },
 };
 
 export default function TenantHome() {
@@ -202,19 +203,19 @@ export default function TenantHome() {
             const mod = MODULES[m]!;
             return (
               <Reveal as="li" key={m} delay={(i + 1) * 80}>
-                <div className="h-full rounded-3xl border border-border bg-card p-7">
+                <Link href={`/${slug}/${mod.path}`} className="group block h-full rounded-3xl border border-border bg-card p-7 transition-[border-color,transform] hover:-translate-y-0.5 hover:border-primary/40">
                   <div className="flex items-center justify-between">
                     <span className="flex size-12 items-center justify-center rounded-2xl text-white" style={{ background: `linear-gradient(135deg, ${mod.tint}, color-mix(in oklab, ${mod.tint} 65%, black))` }}>
                       <mod.icon aria-hidden className="size-6" strokeWidth={1.7} />
                     </span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                      <Sparkles aria-hidden className="size-3.5 text-gold" />
-                      به‌زودی
+                    <span className="inline-flex items-center gap-1 rounded-full bg-success-bg px-2.5 py-1 text-xs font-medium text-success">
+                      <Check aria-hidden className="size-3.5" />
+                      فعال
                     </span>
                   </div>
-                  <h3 className="mt-6 text-lg font-bold">{mod.title}</h3>
+                  <h3 className="mt-6 text-lg font-bold group-hover:text-primary">{mod.title}</h3>
                   <p className="mt-2 text-sm leading-7 text-muted-foreground">{mod.text}</p>
-                </div>
+                </Link>
               </Reveal>
             );
           })}
