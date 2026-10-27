@@ -29,3 +29,6 @@ export function fmtBytes(n: number) {
 export const toFaDigits = (s: string) => s.replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]!);
 
 export const shortId = (id?: string | null) => (id ? id.slice(0, 8) : "—");
+
+/** Rial amount with Persian digits (amounts are whole rials). */
+export const fmtRial = (n?: number | null) => (n === undefined || n === null ? "—" : `${numFmt.format(n)} ریال`);

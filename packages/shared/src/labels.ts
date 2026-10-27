@@ -1,4 +1,4 @@
-import type { EventStatus, EventVisibility, NewsStatus, RegistrationStatus, ChannelPolicy, ChannelRole, CaseStatusCategory, PaperStatus, Recommendation, ReviewMode, ReviewStatus, ThesisStatus, MembershipKind, MembershipStatus, ScopeType, TenantStatus } from "./types";
+import type { PaymentStatus, EventStatus, EventVisibility, NewsStatus, RegistrationStatus, ChannelPolicy, ChannelRole, CaseStatusCategory, PaperStatus, Recommendation, ReviewMode, ReviewStatus, ThesisStatus, MembershipKind, MembershipStatus, ScopeType, TenantStatus } from "./types";
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -252,10 +252,21 @@ export const REGISTRATION_STATUS: Record<RegistrationStatus, { label: string; to
   rejected: { label: "ردشده", tone: "danger" },
   cancelled: { label: "لغوشده", tone: "neutral" },
   waitlisted: { label: "فهرست انتظار", tone: "info" },
+  awaiting_payment: { label: "در انتظار پرداخت", tone: "warning" },
 };
 
 export const EVENT_VISIBILITY: Record<EventVisibility, string> = {
   own_tenant: "فقط این دانشگاه",
   selected_tenants: "دانشگاه‌های منتخب",
   public: "عمومی (همه)",
+};
+
+export const PAYMENT_STATUS: Record<PaymentStatus, { label: string; tone: Tone }> = {
+  created: { label: "منتظر پرداخت", tone: "warning" },
+  pending: { label: "در حال پرداخت", tone: "info" },
+  succeeded: { label: "پرداخت‌شده", tone: "success" },
+  failed: { label: "ناموفق — قابل تلاش مجدد", tone: "danger" },
+  cancelled: { label: "لغوشده", tone: "neutral" },
+  review: { label: "در انتظار بررسی مالی", tone: "warning" },
+  refunded: { label: "بازپرداخت‌شده", tone: "neutral" },
 };

@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "@uni/shared/api";
 import { ErrorState, Loading } from "@uni/shared/ui/states";
-import { ArrowRight, BellRing, CalendarRange, Newspaper, Building, CalendarDays, ClipboardCheck, FileText, GraduationCap, UsersRound, FolderKanban, Inbox, Workflow, LayoutDashboard, Lock, ScrollText, Settings, ShieldCheck, Users } from "lucide-react";
+import { ArrowRight, BarChart3, BellRing, CalendarRange, Newspaper, ReceiptText, Wallet, Building, CalendarDays, ClipboardCheck, FileText, GraduationCap, UsersRound, FolderKanban, Inbox, Workflow, LayoutDashboard, Lock, ScrollText, Settings, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { NotificationBell } from "@uni/shared/ui/notifications";
@@ -36,6 +36,9 @@ export default function TenantLayout({ children }: { children: ReactNode }) {
     ...(has("workflow.define") ? [{ href: `${base}/workflows`, label: "گردش‌کارها", icon: Workflow, group: "فرایندها" }] : []),
     ...(perms.data ? [{ href: `${base}/news`, label: "اخبار", icon: Newspaper, group: "اطلاع‌رسانی" }] : []),
     ...(has("event.manage") ? [{ href: `${base}/events`, label: "رویدادها", icon: CalendarRange, group: "اطلاع‌رسانی" }] : []),
+    ...(has("report.view") ? [{ href: `${base}/reports`, label: "گزارش‌ها", icon: BarChart3, group: "مالی و گزارش" }] : []),
+    ...(has("payment.view") ? [{ href: `${base}/payments`, label: "پرداخت‌ها", icon: Wallet, group: "مالی و گزارش" }] : []),
+    ...(has("payment.manage") ? [{ href: `${base}/fees`, label: "تعرفه‌ها و درگاه", icon: ReceiptText, group: "مالی و گزارش" }] : []),
     ...(has("membership.view") ? [{ href: `${base}/memberships`, label: "عضویت‌ها", icon: Users, group: "اعضا و ساختار" }] : []),
     ...(has("unit.manage") ? [{ href: `${base}/units`, label: "ساختار سازمانی", icon: Building, group: "اعضا و ساختار" }] : []),
     ...(has("role.manage") ? [{ href: `${base}/roles`, label: "نقش‌ها و دسترسی", icon: ShieldCheck, group: "اعضا و ساختار" }] : []),

@@ -157,6 +157,18 @@ export function StepEditor({
         </Field>
       )}
 
+      {step.type === "payment" && (
+        <>
+          <Field label="کد خدمت (تعرفه)" required hint="مبلغ از تعرفه همین کد در «تعرفه‌ها و درگاه» خوانده می‌شود، نه از فرم.">
+            {(p) => <Input {...p} dir="ltr" value={step.serviceKey} placeholder="thesis.defense" onChange={(e) => onChange({ ...step, serviceKey: e.target.value.trim() })} />}
+          </Field>
+          <Field label="مهلت پرداخت (روز)">
+            {(p) => <Input {...p} type="number" dir="ltr" min={1} max={60} value={step.deadlineDays} onChange={(e) => onChange({ ...step, deadlineDays: Math.min(60, Math.max(1, Number(e.target.value) || 1)) })} />}
+          </Field>
+          <p className="text-xs text-muted-foreground">دو انتقال خروجی لازم است: «پرداخت شد» (paid) و «پرداخت نشد» (unpaid، پس از لغو یا گذشتن مهلت).</p>
+        </>
+      )}
+
       {step.type === "end" && (
         <Field label="نتیجه">
           {(p) => (

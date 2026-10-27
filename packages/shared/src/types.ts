@@ -510,7 +510,7 @@ export interface NewsArticle extends Omit<NewsCard, "summary"> {
 }
 
 export type EventStatus = "draft" | "published" | "registration_open" | "registration_closed" | "held" | "cancelled";
-export type RegistrationStatus = "registered" | "pending" | "approved" | "rejected" | "cancelled" | "waitlisted";
+export type RegistrationStatus = "registered" | "pending" | "approved" | "rejected" | "cancelled" | "waitlisted" | "awaiting_payment";
 export type EventVisibility = "own_tenant" | "selected_tenants" | "public";
 
 export interface RegistrationRule {
@@ -546,5 +546,52 @@ export interface EventDetail extends Omit<EventCard, "online"> {
   allowCancel: boolean;
   form: FormFieldDef[];
   registration: { open: boolean; eligible: boolean; full: boolean };
-  mine: { id: string; status: RegistrationStatus; code: string; attended: boolean } | null;
+  mine: { id: string; status: RegistrationStatus; code: string; attended: boolean; paymentId: string | null } | null;
+  feeAmount: number | null;
+}
+
+// ── payments & reports (phase 6) ──────────────────────────────────────────
+
+export type PaymentStatus = "created" | "pending" | "succeeded" | "failed" | "cancelled" | "review" | "refunded";
+
+export interface PaymentRow {
+  id: string;
+  trackingCode: string;
+  title: string;
+  amount: number;
+  status: PaymentStatus;
+  refType: "case" | "event_registration" | "manual";
+  refId: string | null;
+  expiresAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+export interface PaymentAttempt {
+  id: string;
+  adapter: string;
+  status: "started" | "succeeded" | "failed" | "unknown" | "cancelled";
+  referenceId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  authority?: string | null;
+  verifyPayload?: Record<string, unknown> | null;
+}
+
+export interface PaymentDetail extends PaymentRow {
+  serviceKey: string;
+  refStepId: string | null;
+  payer: { fullName: string; mobile: string | null } | null;
+  payable: boolean;
+  attempts: PaymentAttempt[];
+  receipt: { receiptNo: string; referenceId: string | null; issuedAt: string; amount: number } | null;
+  history: { type: string; data: Record<string, unknown>; occurredAt: string; actor: string | null }[];
+}
+
+export interface ReportTable {
+  title: string;
+  columns: { key: string; label: string; type?: "text" | "number" | "date" }[];
+  rows: Record<string, unknown>[];
 }

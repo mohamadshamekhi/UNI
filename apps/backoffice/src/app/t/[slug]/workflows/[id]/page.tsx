@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clsx } from "clsx";
-import { AlertTriangle, ArrowRight, CheckCircle2, CircleDot, Cog, Copy, Flag, FlaskConical, GitFork, Plus, Rocket, Save, ShieldCheck, Split, UserRound, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, CircleDot, Cog, Copy, Flag, FlaskConical, GitFork, Plus, Rocket, Save, ShieldCheck, Split, UserRound, Wallet, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -37,7 +37,7 @@ import { Sandbox } from "@/components/workflow/sandbox";
 import { TransitionsEditor } from "@/components/workflow/transitions-editor";
 import { useSlug, useUnits } from "@/lib/hooks";
 
-const STEP_ICON: Record<StepType, LucideIcon> = { human: UserRound, decision: Split, parallel: GitFork, system: Cog, end: Flag };
+const STEP_ICON: Record<StepType, LucideIcon> = { human: UserRound, decision: Split, parallel: GitFork, system: Cog, payment: Wallet, end: Flag };
 
 function WorkflowInner() {
   const slug = useSlug();

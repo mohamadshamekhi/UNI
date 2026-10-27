@@ -20,6 +20,7 @@ export type Step =
   | { id: string; title: string; type: "decision" }
   | { id: string; title: string; type: "parallel"; branches: string[]; join: "all" | "any" }
   | { id: string; title: string; type: "system"; task: "notify" | "request_payment" | "tag" | "thesis"; params: Record<string, unknown> }
+  | { id: string; title: string; type: "payment"; serviceKey: string; deadlineDays: number }
   | { id: string; title: string; type: "end"; outcome: "success" | "failure" };
 
 export type StepType = Step["type"];
@@ -81,6 +82,7 @@ export const STEP_TYPE: Record<StepType, { label: string; hint: string }> = {
   decision: { label: "تصمیم خودکار", hint: "انتخاب مسیر با شرط" },
   parallel: { label: "موازی", hint: "چند بررسی هم‌زمان" },
   system: { label: "سیستمی", hint: "اعلان، درخواست پرداخت یا برچسب" },
+  payment: { label: "پرداخت", hint: "پرونده تا پرداخت هزینه منتظر می‌ماند" },
   end: { label: "پایان", hint: "نتیجه نهایی پرونده" },
 };
 
@@ -109,6 +111,8 @@ export function blankStep(type: StepType, id: string): Step {
       return { id, type, title: "بررسی موازی", branches: [], join: "all" };
     case "system":
       return { id, type, title: "اعلان", task: "notify", params: {} };
+    case "payment":
+      return { id, type, title: "پرداخت هزینه", serviceKey: "", deadlineDays: 7 };
     case "end":
       return { id, type, title: "پایان", outcome: "success" };
   }

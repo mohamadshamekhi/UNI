@@ -5,7 +5,7 @@ import { Logo } from "@uni/shared/ui/logo";
 import { ErrorState, Loading } from "@uni/shared/ui/states";
 import { NotificationBell } from "@uni/shared/ui/notifications";
 import { ThemeToggle } from "@uni/shared/ui/theme";
-import { CalendarDays, ChevronLeft, FileText, Newspaper, FolderOpen, GraduationCap, LogIn, LogOut, Menu, UserRound, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, FileText, Newspaper, Wallet, FolderOpen, GraduationCap, LogIn, LogOut, Menu, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
@@ -136,6 +136,10 @@ function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: Public
                 <FileText aria-hidden className="size-4" />
                 مقالات
               </Link>
+              <Link href={`/${slug}/payments`} className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
+                <Wallet aria-hidden className="size-4" />
+                پرداخت‌ها
+              </Link>
               <button type="button" onClick={logout} className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${solid ? "text-danger hover:bg-danger-bg" : "text-white/75 hover:text-white"}`}>
                 <LogOut aria-hidden className="size-4" />
                 خروج
@@ -179,6 +183,7 @@ function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: Public
               <Link href={`/${slug}/cases`} onClick={() => setOpen(false)} className="block px-2 py-3">پرونده‌های من</Link>
               <Link href={`/${slug}/thesis`} onClick={() => setOpen(false)} className="block px-2 py-3">پرونده تحصیلی</Link>
               <Link href={`/${slug}/papers`} onClick={() => setOpen(false)} className="block px-2 py-3">مقالات من</Link>
+              <Link href={`/${slug}/payments`} onClick={() => setOpen(false)} className="block px-2 py-3">پرداخت‌های من</Link>
               <button type="button" onClick={logout} className="block w-full cursor-pointer px-2 py-3 text-start text-danger">خروج</button>
             </>
           ) : (

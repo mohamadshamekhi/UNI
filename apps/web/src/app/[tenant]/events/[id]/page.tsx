@@ -1,12 +1,12 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, CalendarDays, CheckCircle2, Clock, MapPin, Users, Video } from "lucide-react";
+import { ArrowRight, CalendarDays, CheckCircle2, Clock, MapPin, Users, Video, Wallet } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { api, ApiError, errorMessage } from "@uni/shared/api";
-import { fmtDateTime, fmtNum } from "@uni/shared/format";
+import { fmtDateTime, fmtNum, fmtRial } from "@uni/shared/format";
 import { EVENT_STATUS, REGISTRATION_STATUS } from "@uni/shared/labels";
 import { Badge } from "@uni/shared/ui/badge";
 import { Button } from "@uni/shared/ui/button";
@@ -21,6 +21,7 @@ export default function EventPage() {
   const { id } = useParams<{ id: string }>();
   const session = useSession();
   const qc = useQueryClient();
+  const router = useRouter();
   const q = useQuery({ queryKey: ["event", slug, id], queryFn: () => api<EventDetail>(`/v1/events/${id}`, { tenant: slug, public: true }) });
   const [values, setValues] = useState<FormValues>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -33,7 +34,11 @@ export default function EventPage() {
     setError(null);
     setFieldErrors({});
     try {
-      await api(`/v1/events/${id}/registrations`, { method: "POST", tenant: slug, body: { answers: values } });
+      const r = await api<{ paymentId: string | null; status: string }>(`/v1/events/${id}/registrations`, { method: "POST", tenant: slug, body: { answers: values } });
+      if (r.status === "awaiting_payment" && r.paymentId) {
+        router.push(`/${slug}/payments/${r.paymentId}`);
+        return;
+      }
       await qc.invalidateQueries({ queryKey: ["event", slug, id] });
     } catch (err) {
       if (err instanceof ApiError && err.details?.fields && typeof err.details.fields === "object") setFieldErrors(err.details.fields as Record<string, string>);
@@ -89,6 +94,7 @@ export default function EventPage() {
                 </Info>
               )}
               {e.capacity && <Info icon={Users} label="ظرفیت">{fmtNum(e.taken)} از {fmtNum(e.capacity)} نفر</Info>}
+              <Info icon={Wallet} label="هزینه">{e.feeAmount ? fmtRial(e.feeAmount) : "رایگان"}</Info>
               {e.registrationDeadline && <Info icon={Clock} label="مهلت ثبت‌نام">{fmtDateTime(e.registrationDeadline)}</Info>}
             </dl>
             {e.descriptionHtml && <div className="rich" dangerouslySetInnerHTML={{ __html: e.descriptionHtml }} />}
@@ -105,6 +111,14 @@ export default function EventPage() {
                 <p className="text-sm text-muted-foreground">
                   کد ثبت‌نام: <span dir="ltr" className="font-mono font-bold text-foreground">{e.mine.code}</span>
                 </p>
+                {e.mine.status === "awaiting_payment" && e.mine.paymentId && (
+                  <>
+                    <p className="text-sm leading-7 text-muted-foreground">جای شما نگه داشته شده است؛ ثبت‌نام پس از پرداخت هزینه قطعی می‌شود.</p>
+                    <Link href={`/${slug}/payments/${e.mine.paymentId}`} className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-sm font-semibold text-on-primary">
+                      پرداخت {fmtRial(e.feeAmount)}
+                    </Link>
+                  </>
+                )}
                 {e.mine.status === "waitlisted" && <p className="text-sm leading-7 text-muted-foreground">با آزاد شدن ظرفیت، ثبت‌نام شما خودکار قطعی می‌شود و پیام دریافت می‌کنید.</p>}
                 {e.mine.status === "pending" && <p className="text-sm leading-7 text-muted-foreground">ثبت‌نام شما پس از تأیید برگزارکننده قطعی می‌شود.</p>}
                 {e.allowCancel && e.status !== "held" && e.mine.status !== "rejected" && (
@@ -130,7 +144,7 @@ export default function EventPage() {
                 {e.form.length > 0 && <FormFields fields={e.form} values={values} onChange={setValues} errors={fieldErrors} tenant={e.host?.slug ?? slug} showInternal={false} />}
                 {error && <p role="alert" className="text-sm text-danger">{error}</p>}
                 <Button type="submit" loading={pending} disabled={e.registration.full && !e.waitlist}>
-                  {e.registration.full ? "ورود به فهرست انتظار" : "ثبت‌نام"}
+                  {e.registration.full ? "ورود به فهرست انتظار" : e.feeAmount ? `ثبت‌نام و پرداخت ${fmtRial(e.feeAmount)}` : "ثبت‌نام"}
                 </Button>
               </form>
             )}

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import { api, errorMessage } from "@uni/shared/api";
-import { fmtDateTime, fmtNum } from "@uni/shared/format";
+import { fmtDateTime, fmtNum, fmtRial } from "@uni/shared/format";
 import { EVENT_STATUS, EVENT_VISIBILITY, REGISTRATION_STATUS } from "@uni/shared/labels";
 import { Badge } from "@uni/shared/ui/badge";
 import { Button } from "@uni/shared/ui/button";
@@ -44,6 +44,7 @@ interface EventRow {
   requiresApproval: boolean;
   allowCancel: boolean;
   form: FormFieldDef[];
+  feeAmount: number | null;
   counts: Partial<Record<RegistrationStatus, number>>;
 }
 
@@ -84,6 +85,7 @@ const blank = (): Omit<EventRow, "id" | "status" | "counts"> => {
     requiresApproval: false,
     allowCancel: true,
     form: [],
+    feeAmount: null,
   };
 };
 
@@ -151,6 +153,7 @@ function EventEditor({ event }: { event?: EventRow }) {
       requiresApproval: v.requiresApproval,
       allowCancel: v.allowCancel,
       form: v.form,
+      feeAmount: v.feeAmount,
     };
     try {
       if (!event) {
@@ -332,6 +335,9 @@ function EventEditor({ event }: { event?: EventRow }) {
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="ظرفیت" hint="خالی یعنی نامحدود.">
                   {(p) => <Input {...p} type="number" dir="ltr" min={1} value={v.capacity ?? ""} onChange={(e) => set({ capacity: e.target.value ? Math.max(1, Number(e.target.value)) : null })} />}
+                </Field>
+                <Field label="هزینه ثبت‌نام (ریال)" hint={v.feeAmount ? `${fmtRial(v.feeAmount)} — ثبت‌نام پس از پرداخت قطعی می‌شود.` : "خالی یعنی رایگان. تغییر مبلغ فقط روی ثبت‌نام‌های بعدی اثر دارد."}>
+                  {(p) => <Input {...p} dir="ltr" inputMode="numeric" value={v.feeAmount ?? ""} onChange={(e) => { const n = Number(e.target.value.replace(/[^\d]/g, "")); set({ feeAmount: n || null }); }} />}
                 </Field>
                 <Field label="مهلت ثبت‌نام">{(p) => <DateTimeInput id={p.id} value={v.registrationDeadline} onChange={(x) => set({ registrationDeadline: x })} />}</Field>
               </div>

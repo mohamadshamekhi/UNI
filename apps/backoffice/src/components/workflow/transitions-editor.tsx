@@ -74,6 +74,13 @@ export function TransitionsEditor({
                         )}
                       </div>
                     )}
+                    {from?.type === "payment" && (
+                      <Select aria-label="نتیجه پرداخت" value={t.action ?? ""} disabled={readOnly} onChange={(e) => set(i, { ...t, action: e.target.value || undefined })}>
+                        <option value="">انتخاب نتیجه</option>
+                        <option value="paid">پرداخت شد</option>
+                        <option value="unpaid">پرداخت نشد</option>
+                      </Select>
+                    )}
                     {(from?.type === "parallel" || from?.type === "system") && <span className="text-xs text-muted-foreground">خودکار (تنها خروجی)</span>}
                     {errs && (
                       <ul role="alert" className="mt-2 text-xs text-danger">
