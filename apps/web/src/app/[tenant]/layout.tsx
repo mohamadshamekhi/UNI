@@ -5,7 +5,7 @@ import { Logo } from "@uni/shared/ui/logo";
 import { ErrorState, Loading } from "@uni/shared/ui/states";
 import { NotificationBell } from "@uni/shared/ui/notifications";
 import { ThemeToggle } from "@uni/shared/ui/theme";
-import { ChevronLeft, FileText, FolderOpen, GraduationCap, LogIn, LogOut, Menu, UserRound, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, FileText, Newspaper, FolderOpen, GraduationCap, LogIn, LogOut, Menu, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
@@ -103,10 +103,18 @@ function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: Public
           <TenantMark slug={slug} tenant={tenant} />
           <span className="truncate">{name}</span>
         </Link>
-        <nav aria-label="حساب کاربری" className="ms-auto hidden items-center gap-1 md:flex">
+        <nav aria-label="حساب کاربری" className="ms-auto hidden items-center gap-1 xl:flex">
           <Link href="/" className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
             <Logo className="size-5" />
             همه دانشگاه‌ها
+          </Link>
+          <Link href={`/${slug}/news`} className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
+            <Newspaper aria-hidden className="size-4" />
+            اخبار
+          </Link>
+          <Link href={`/${slug}/events`} className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
+            <CalendarDays aria-hidden className="size-4" />
+            رویدادها
           </Link>
           <ThemeToggle className={solid ? "hover:bg-muted" : "hover:bg-white/10"} />
           {session.data ? (
@@ -148,7 +156,7 @@ function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: Public
             </>
           )}
         </nav>
-        <div className="ms-auto flex items-center gap-1 md:hidden">
+        <div className="ms-auto flex items-center gap-1 xl:hidden">
           <ThemeToggle className={solid ? "hover:bg-muted" : "hover:bg-white/10"} />
           {session.data && <NotificationBell tenant={slug} inboxHref={`/${slug}/notifications`} resolve={portalLink} className={solid ? "hover:bg-muted" : "hover:bg-white/10"} />}
           <button
@@ -164,7 +172,7 @@ function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: Public
         </div>
       </div>
       {open && (
-        <nav id="tenant-nav" aria-label="حساب کاربری" className={`${CONTAINER} border-t border-border pb-4 md:hidden`}>
+        <nav id="tenant-nav" aria-label="حساب کاربری" className={`${CONTAINER} border-t border-border pb-4 xl:hidden`}>
           {session.data ? (
             <>
               <Link href={`/${slug}/me`} onClick={() => setOpen(false)} className="block px-2 py-3">وضعیت من</Link>
@@ -179,6 +187,8 @@ function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: Public
               <Link href={`/${slug}/register`} onClick={() => setOpen(false)} className="mt-2 flex h-11 items-center justify-center rounded-full bg-primary font-semibold text-on-primary">ثبت‌نام</Link>
             </>
           )}
+          <Link href={`/${slug}/news`} onClick={() => setOpen(false)} className="block px-2 py-3">اخبار</Link>
+          <Link href={`/${slug}/events`} onClick={() => setOpen(false)} className="block px-2 py-3">رویدادها</Link>
           <Link href="/" onClick={() => setOpen(false)} className="block px-2 py-3 text-muted-foreground">همه دانشگاه‌ها</Link>
         </nav>
       )}

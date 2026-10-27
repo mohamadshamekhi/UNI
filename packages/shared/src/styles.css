@@ -169,3 +169,20 @@ dialog::backdrop {
   .reveal { opacity: 1; transform: none; }
   html { scroll-behavior: auto; }
 }
+
+/* sanitised rich text (news bodies, event descriptions) */
+.rich { line-height: 2; font-size: 1rem; }
+.rich > * + * { margin-top: 1em; }
+.rich h2 { font-size: 1.375rem; font-weight: 800; margin-top: 1.6em; }
+.rich h3 { font-size: 1.175rem; font-weight: 700; margin-top: 1.4em; }
+.rich h4 { font-weight: 700; }
+.rich a { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.rich ul { list-style: disc; padding-inline-start: 1.5rem; }
+.rich ol { list-style: decimal; padding-inline-start: 1.5rem; }
+.rich blockquote { border-inline-start: 4px solid var(--border); padding-inline-start: 1rem; color: var(--muted-foreground); }
+.rich pre, .rich code { direction: ltr; font-family: ui-monospace, monospace; font-size: 0.875em; background: var(--muted); border-radius: 0.5rem; }
+.rich code { padding: 0.1em 0.35em; }
+.rich pre { padding: 1rem; overflow-x: auto; }
+.rich table { width: 100%; border-collapse: collapse; display: block; overflow-x: auto; }
+.rich th, .rich td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: start; }
+.rich hr { border-color: var(--border); }

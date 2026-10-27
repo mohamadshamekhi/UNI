@@ -473,3 +473,78 @@ export interface ReviewerCandidate {
   done: number;
   conflicts: string[];
 }
+
+// ── news & events (phase 5) ───────────────────────────────────────────────
+
+export type NewsStatus = "draft" | "pending_approval" | "approved" | "scheduled" | "published" | "archived" | "deleted";
+export type ChannelPolicy = "direct" | "single" | "multi";
+export type ChannelRole = "author" | "approver" | "publisher";
+
+export interface Audience {
+  public?: boolean;
+  members?: boolean;
+  units?: { id: string; tree?: boolean }[];
+  roles?: string[];
+  memberships?: string[];
+}
+
+export interface NewsCard {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string | null;
+  category: string | null;
+  tags: string[];
+  coverFileId: string | null;
+  publishedAt: string | null;
+  channelName: string;
+  isPublic: boolean;
+}
+
+export interface NewsArticle extends Omit<NewsCard, "summary"> {
+  summary: string;
+  bodyHtml: string;
+  source: string | null;
+  author: string;
+  attachments: { id: string; originalName: string; mimeType: string; sizeBytes: number; scanStatus: string }[];
+}
+
+export type EventStatus = "draft" | "published" | "registration_open" | "registration_closed" | "held" | "cancelled";
+export type RegistrationStatus = "registered" | "pending" | "approved" | "rejected" | "cancelled" | "waitlisted";
+export type EventVisibility = "own_tenant" | "selected_tenants" | "public";
+
+export interface RegistrationRule {
+  members?: boolean;
+  authenticated?: boolean;
+  roles?: string[];
+  units?: { id: string; tree?: boolean }[];
+  tenants?: string[];
+}
+
+export interface EventCard {
+  id: string;
+  title: string;
+  category: string | null;
+  organizer: string | null;
+  startsAt: string;
+  endsAt: string;
+  location: string | null;
+  online: boolean;
+  coverFileId: string | null;
+  status: EventStatus;
+  capacity: number | null;
+  taken: number;
+  registrationDeadline: string | null;
+  host: { nameFa: string; slug: string } | null;
+}
+
+export interface EventDetail extends Omit<EventCard, "online"> {
+  descriptionHtml: string | null;
+  onlineUrl: string | null;
+  waitlist: boolean;
+  requiresApproval: boolean;
+  allowCancel: boolean;
+  form: FormFieldDef[];
+  registration: { open: boolean; eligible: boolean; full: boolean };
+  mine: { id: string; status: RegistrationStatus; code: string; attended: boolean } | null;
+}

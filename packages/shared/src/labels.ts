@@ -1,4 +1,4 @@
-import type { CaseStatusCategory, PaperStatus, Recommendation, ReviewMode, ReviewStatus, ThesisStatus, MembershipKind, MembershipStatus, ScopeType, TenantStatus } from "./types";
+import type { EventStatus, EventVisibility, NewsStatus, RegistrationStatus, ChannelPolicy, ChannelRole, CaseStatusCategory, PaperStatus, Recommendation, ReviewMode, ReviewStatus, ThesisStatus, MembershipKind, MembershipStatus, ScopeType, TenantStatus } from "./types";
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -213,3 +213,49 @@ export const SCORE_CRITERIA: { key: string; label: string }[] = [
   { key: "methodology", label: "روش‌شناسی" },
   { key: "writing", label: "نگارش" },
 ];
+
+export const NEWS_STATUS: Record<NewsStatus, { label: string; tone: Tone }> = {
+  draft: { label: "پیش‌نویس", tone: "neutral" },
+  pending_approval: { label: "در انتظار تأیید", tone: "warning" },
+  approved: { label: "تأییدشده", tone: "info" },
+  scheduled: { label: "زمان‌بندی‌شده", tone: "info" },
+  published: { label: "منتشرشده", tone: "success" },
+  archived: { label: "بایگانی", tone: "neutral" },
+  deleted: { label: "حذف‌شده", tone: "danger" },
+};
+
+export const CHANNEL_POLICY: Record<ChannelPolicy, string> = {
+  direct: "انتشار مستقیم",
+  single: "یک تأیید",
+  multi: "چند تأیید",
+};
+
+export const CHANNEL_ROLE: Record<ChannelRole, string> = {
+  author: "نویسنده",
+  approver: "تأییدکننده",
+  publisher: "منتشرکننده",
+};
+
+export const EVENT_STATUS: Record<EventStatus, { label: string; tone: Tone }> = {
+  draft: { label: "پیش‌نویس", tone: "neutral" },
+  published: { label: "اعلام‌شده", tone: "info" },
+  registration_open: { label: "ثبت‌نام باز", tone: "success" },
+  registration_closed: { label: "ثبت‌نام بسته", tone: "warning" },
+  held: { label: "برگزارشده", tone: "neutral" },
+  cancelled: { label: "لغوشده", tone: "danger" },
+};
+
+export const REGISTRATION_STATUS: Record<RegistrationStatus, { label: string; tone: Tone }> = {
+  registered: { label: "ثبت‌نام قطعی", tone: "success" },
+  pending: { label: "در انتظار تأیید", tone: "warning" },
+  approved: { label: "تأییدشده", tone: "success" },
+  rejected: { label: "ردشده", tone: "danger" },
+  cancelled: { label: "لغوشده", tone: "neutral" },
+  waitlisted: { label: "فهرست انتظار", tone: "info" },
+};
+
+export const EVENT_VISIBILITY: Record<EventVisibility, string> = {
+  own_tenant: "فقط این دانشگاه",
+  selected_tenants: "دانشگاه‌های منتخب",
+  public: "عمومی (همه)",
+};
