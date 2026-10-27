@@ -1,12 +1,13 @@
 import { Logger, Module, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { AclModule } from '../acl/acl.module.js';
 import { FilesModule } from '../files/files.module.js';
+import { PaymentsModule } from '../payments/payments.module.js';
 import { EventsService } from './events.service.js';
 import { EventsAdminController, EventsController, NewsAdminController, NewsFeedController, NewsPublicFilesController } from './news.controller.js';
 import { NewsService } from './news.service.js';
 
 @Module({
-  imports: [AclModule, FilesModule],
+  imports: [AclModule, FilesModule, PaymentsModule],
   providers: [NewsService, EventsService],
   controllers: [NewsFeedController, NewsPublicFilesController, NewsAdminController, EventsController, EventsAdminController],
   exports: [NewsService, EventsService],

@@ -493,6 +493,10 @@ export class NewsService implements OnModuleInit {
         .where(and(eq(newsPosts.slug, slug), eq(newsPosts.status, 'published'), audienceMatch(sql`${newsPosts.audience}`, v)))
         .limit(1);
       if (!p) throw new AppError('NOT_FOUND');
+      // anonymous daily counter for reports (no viewer identity)
+      await tx.execute(sql`
+        insert into news_post_views (tenant_id, post_id, day, views) values (${p.post.tenantId}, ${p.post.id}, current_date, 1)
+        on conflict (post_id, day) do update set views = news_post_views.views + 1`);
       const files = p.post.attachmentFileIds.length
         ? await tx
             .select({ id: fileObjects.id, originalName: fileObjects.originalName, mimeType: fileObjects.mimeType, sizeBytes: fileObjects.sizeBytes, scanStatus: fileObjects.scanStatus })

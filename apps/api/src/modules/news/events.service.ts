@@ -1,14 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { requestContext } from '../../common/context/request-context.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { DbService, type Executor } from '../../database/db.service.js';
-import { eventRegistrations, events, fileObjects, memberships, tenants, users, type EventStatus, type RegistrationRule, type RegistrationStatus } from '../../database/schema.js';
+import { eventRegistrations, events, feeSchedules, fileObjects, memberships, tenants, users, type EventStatus, type RegistrationRule, type RegistrationStatus } from '../../database/schema.js';
 import { AclService } from '../acl/acl.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
+import { PaymentsService } from '../payments/payments.service.js';
 import { formFieldSchema } from '../workflow/definition.js';
 import { validateForm } from '../workflow/forms.js';
 import { pgArray } from './audience.js';
@@ -16,6 +17,10 @@ import { cleanHtml } from './html.js';
 
 type EventRow = typeof events.$inferSelect;
 const ACTIVE: RegistrationStatus[] = ['registered', 'pending', 'approved'];
+/** statuses that hold a seat (a registration waiting for its payment keeps its place) */
+const HOLDING: RegistrationStatus[] = [...ACTIVE, 'awaiting_payment'];
+/** time a paid registration has to pay before its seat is released */
+const PAY_WINDOW_MS = 48 * 3_600_000;
 const formSchema = z.array(formFieldSchema).max(20);
 const ruleSchema = z
   .object({
@@ -48,6 +53,7 @@ export interface EventInput {
   allowCancel?: boolean;
   form?: unknown[];
   newsPostId?: string | null;
+  feeAmount?: number | null;
 }
 
 const code = () => randomBytes(5).toString('base64url').toUpperCase().replace(/[^A-Z0-9]/g, 'X').slice(0, 8);
@@ -58,13 +64,66 @@ const code = () => randomBytes(5).toString('base64url').toUpperCase().replace(/[
  * live in the organising tenant.
  */
 @Injectable()
-export class EventsService {
+export class EventsService implements OnModuleInit {
   constructor(
     private readonly db: DbService,
     private readonly acl: AclService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly payments: PaymentsService,
   ) {}
+
+  /** Paid events (EVT/PAY): the payment result confirms or releases the seat. */
+  onModuleInit() {
+    this.outbox.on('payment.succeeded', async ({ tenantId, payload }) => {
+      if (!tenantId || payload.refType !== 'event_registration') return;
+      await this.db.background(tenantId, 'event.payment', async (tx) => {
+        const [r] = await tx.select().from(eventRegistrations).where(eq(eventRegistrations.id, payload.refId as string)).limit(1);
+        if (!r || r.status !== 'awaiting_payment') return;
+        const e = await this.load(tx, r.eventId);
+        const status: RegistrationStatus = e.requiresApproval ? 'pending' : 'registered';
+        await tx.update(eventRegistrations).set({ status }).where(eq(eventRegistrations.id, r.id));
+        await this.outbox.emit('event.registered', { eventId: e.id, registrationId: r.id, status }, `event.registered:${r.id}:paid`, tenantId, tx);
+      });
+    });
+    this.outbox.on('payment.cancelled', async ({ tenantId, payload }) => {
+      if (!tenantId || payload.refType !== 'event_registration') return;
+      await this.db.background(tenantId, 'event.payment', async (tx) => {
+        const [r] = await tx.select().from(eventRegistrations).where(eq(eventRegistrations.id, payload.refId as string)).limit(1);
+        if (!r || r.status !== 'awaiting_payment') return;
+        const e = await this.load(tx, r.eventId);
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${e.id}))`);
+        await tx.update(eventRegistrations).set({ status: 'cancelled', cancelledAt: new Date() }).where(eq(eventRegistrations.id, r.id));
+        await this.promote(tx, e);
+      });
+    });
+  }
+
+  /** Paid registration: creates its payment request (amount from the event's tariff). */
+  private async requestPayment(tx: Executor, e: EventRow, registrationId: string, userId: string, membershipId: string | null) {
+    const deadline = e.registrationDeadline && e.registrationDeadline.getTime() < Date.now() + PAY_WINDOW_MS ? e.registrationDeadline : new Date(Date.now() + PAY_WINDOW_MS);
+    const pr = await this.payments.createRequest(tx, e.tenantId, {
+      serviceKey: `event:${e.id}`,
+      title: `ثبت‌نام «${e.title}»`,
+      payerUserId: userId,
+      payerMembershipId: membershipId,
+      refType: 'event_registration',
+      refId: registrationId,
+      expiresAt: deadline,
+      idempotencyKey: `event_registration:${registrationId}`,
+    });
+    await tx.update(eventRegistrations).set({ paymentRequestId: pr.id }).where(eq(eventRegistrations.id, registrationId));
+    return pr.id;
+  }
+
+  /** The event's price is a versioned tariff `event:<id>` (PAY-10); the organiser sets it with the event. */
+  private async syncFee(tx: Executor, e: EventRow, amount: number | null | undefined) {
+    if (amount === undefined || amount === null) return;
+    const current = await this.payments.currentFee(tx, `event:${e.id}`);
+    if (current?.amount === amount) return;
+    const [{ v }] = (await tx.execute<{ v: number }>(sql`select coalesce(max(version), 0)::int + 1 as v from fee_schedules where service_key = ${`event:${e.id}`}`)).rows as [{ v: number }];
+    await tx.insert(feeSchedules).values({ tenantId: e.tenantId, serviceKey: `event:${e.id}`, title: `ثبت‌نام «${e.title}»`, amount, version: v, createdBy: requestContext.get().userId });
+  }
 
   private me() {
     const ctx = requestContext.get();
@@ -105,6 +164,7 @@ export class EventsService {
       ...(input.allowCancel !== undefined ? { allowCancel: input.allowCancel } : {}),
       ...(form ? { form: form.data } : {}),
       ...(input.newsPostId !== undefined ? { newsPostId: input.newsPostId } : {}),
+      ...(input.feeAmount !== undefined ? { feeAmount: input.feeAmount } : {}),
     };
   }
 
@@ -114,12 +174,14 @@ export class EventsService {
     await this.assertManage(input.organizerUnitId ?? null);
     const ctx = requestContext.get();
     const f = this.fields(input);
-    const [e] = await this.db.run((tx) =>
-      tx
+    const [e] = await this.db.run(async (tx) => {
+      const rows = await tx
         .insert(events)
         .values({ tenantId: ctx.tenant!.id, title: f.title!, startsAt: f.startsAt!, endsAt: f.endsAt!, visibility: f.visibility!, registrationRule: f.registrationRule!, ...f, createdBy: ctx.userId })
-        .returning(),
-    );
+        .returning();
+      await this.syncFee(tx, rows[0]!, input.feeAmount);
+      return rows;
+    });
     await this.audit.record({ action: 'event.created', targetType: 'event', targetId: e!.id, after: { title: e!.title } });
     return e!;
   }
@@ -137,6 +199,7 @@ export class EventsService {
       if (input.organizerUnitId !== undefined && input.organizerUnitId !== e.organizerUnitId) await this.assertManage(input.organizerUnitId ?? null);
       if (e.status === 'cancelled' || e.status === 'held') throw new AppError('INVALID_STATE_TRANSITION');
       const [u] = await tx.update(events).set({ ...this.fields(input), updatedAt: new Date() }).where(eq(events.id, id)).returning();
+      await this.syncFee(tx, u!, input.feeAmount);
       return u!;
     });
   }
@@ -234,7 +297,7 @@ export class EventsService {
       await this.assertManage(e.organizerUnitId);
       if (r.status !== 'pending') throw new AppError('INVALID_STATE_TRANSITION');
       await tx.update(eventRegistrations).set({ status: approve ? 'approved' : 'rejected', decidedAt: new Date() }).where(eq(eventRegistrations.id, r.id));
-      await this.outbox.emit('event.registration.decided', { eventId: e.id, registrationId: r.id, approved: approve }, `event.registration.decided:${r.id}`);
+      await this.outbox.emit('event.registration.decided', { eventId: e.id, registrationId: r.id, approved: approve }, `event.registration.decided:${r.id}`, e.tenantId, tx);
       if (!approve) await this.promote(tx, e);
       return { id: r.id, status: approve ? 'approved' : 'rejected' };
     });
@@ -269,7 +332,7 @@ export class EventsService {
       await this.db.sys.execute<EventRow & Record<string, unknown>>(sql`
         select e.id, e.tenant_id, e.title, e.category, e.organizer, e.starts_at, e.ends_at, e.location, e.online_url, e.cover_file_id,
                e.status, e.visibility, e.capacity, e.registration_deadline, t.name_fa as tenant_name, t.slug as tenant_slug,
-               (select count(*)::int from event_registrations r where r.event_id = e.id and r.status in ('registered', 'pending', 'approved')) as taken
+               (select count(*)::int from event_registrations r where r.event_id = e.id and r.status in ('registered', 'pending', 'approved', 'awaiting_payment')) as taken
         from events e join tenants t on t.id = e.tenant_id and t.status = 'active'
         where e.status <> 'draft'
           and (e.tenant_id = ${tenantId} or e.visibility = 'public' or (e.visibility = 'selected_tenants' and ${tenantId}::uuid = any(e.visible_tenant_ids)))
@@ -360,7 +423,7 @@ export class EventsService {
           .where(and(eq(eventRegistrations.eventId, e.id), eq(eventRegistrations.userId, ctx.userId), sql`${eventRegistrations.status} <> 'cancelled'`))
           .limit(1)
       : [];
-    const [{ taken }] = (await this.db.sys.execute<{ taken: number }>(sql`select count(*)::int as taken from event_registrations where event_id = ${e.id} and status in ('registered', 'pending', 'approved')`)).rows as [{ taken: number }];
+    const [{ taken }] = (await this.db.sys.execute<{ taken: number }>(sql`select count(*)::int as taken from event_registrations where event_id = ${e.id} and status in ('registered', 'pending', 'approved', 'awaiting_payment')`)).rows as [{ taken: number }];
     const [host] = await this.db.sys.select({ nameFa: tenants.nameFa, slug: tenants.slug }).from(tenants).where(eq(tenants.id, e.tenantId));
     const eligible = ctx.userId ? (await this.eligible(e, ctx.userId)).ok : false;
     const open = e.status === 'registration_open' && (!e.registrationDeadline || e.registrationDeadline > new Date());
@@ -385,7 +448,8 @@ export class EventsService {
       form: e.form,
       host: e.tenantId === ctx.tenant!.id ? null : host,
       registration: { open, eligible, full: !!e.capacity && taken >= e.capacity },
-      mine: mine ? { id: mine.id, status: mine.status, code: mine.code, attended: !!mine.attendedAt } : null,
+      mine: mine ? { id: mine.id, status: mine.status, code: mine.code, attended: !!mine.attendedAt, paymentId: mine.paymentRequestId } : null,
+      feeAmount: e.feeAmount,
     };
   }
 
@@ -406,11 +470,11 @@ export class EventsService {
         .from(eventRegistrations)
         .where(and(eq(eventRegistrations.eventId, e.id), eq(eventRegistrations.userId, me.userId), sql`${eventRegistrations.status} <> 'cancelled'`))
         .limit(1);
-      if (existing) return { id: existing.id, status: existing.status, code: existing.code, duplicate: true };
-      const [{ taken }] = (await tx.execute<{ taken: number }>(sql`select count(*)::int as taken from event_registrations where event_id = ${e.id} and status in ('registered', 'pending', 'approved')`)).rows as [{ taken: number }];
+      if (existing) return { id: existing.id, status: existing.status, code: existing.code, duplicate: true, paymentId: existing.paymentRequestId };
+      const [{ taken }] = (await tx.execute<{ taken: number }>(sql`select count(*)::int as taken from event_registrations where event_id = ${e.id} and status in ('registered', 'pending', 'approved', 'awaiting_payment')`)).rows as [{ taken: number }];
       const full = !!e.capacity && taken >= e.capacity;
       if (full && !e.waitlist) throw new AppError('EVENT_FULL');
-      const status: RegistrationStatus = full ? 'waitlisted' : e.requiresApproval ? 'pending' : 'registered';
+      const status: RegistrationStatus = full ? 'waitlisted' : e.feeAmount ? 'awaiting_payment' : e.requiresApproval ? 'pending' : 'registered';
       const [r] = await tx
         .insert(eventRegistrations)
         .values({
@@ -424,8 +488,9 @@ export class EventsService {
           code: code(),
         })
         .returning();
-      await this.outbox.emit('event.registered', { eventId: e.id, registrationId: r!.id, status }, `event.registered:${r!.id}`, e.tenantId);
-      return { id: r!.id, status: r!.status, code: r!.code, duplicate: false };
+      const paymentId = status === 'awaiting_payment' ? await this.requestPayment(tx, e, r!.id, me.userId, membershipId) : null;
+      if (status !== 'awaiting_payment') await this.outbox.emit('event.registered', { eventId: e.id, registrationId: r!.id, status }, `event.registered:${r!.id}`, e.tenantId, tx);
+      return { id: r!.id, status: r!.status, code: r!.code, duplicate: false, paymentId };
     });
   }
 
@@ -438,15 +503,16 @@ export class EventsService {
       const e = await this.load(tx, r.eventId);
       if (!e.allowCancel || r.status === 'cancelled' || e.status === 'held') throw new AppError('INVALID_STATE_TRANSITION');
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${e.id}))`);
+      if (r.status === 'awaiting_payment' && r.paymentRequestId) await this.payments.closeRequest(tx, r.paymentRequestId, 'registration_cancelled');
       await tx.update(eventRegistrations).set({ status: 'cancelled', cancelledAt: new Date() }).where(eq(eventRegistrations.id, r.id));
-      if (ACTIVE.includes(r.status)) await this.promote(tx, e);
+      if (HOLDING.includes(r.status)) await this.promote(tx, e);
       return { id: r.id, status: 'cancelled' };
     });
   }
 
   private async promote(tx: Executor, e: EventRow) {
     if (!e.capacity) return;
-    const [{ taken }] = (await tx.execute<{ taken: number }>(sql`select count(*)::int as taken from event_registrations where event_id = ${e.id} and status in ('registered', 'pending', 'approved')`)).rows as [{ taken: number }];
+    const [{ taken }] = (await tx.execute<{ taken: number }>(sql`select count(*)::int as taken from event_registrations where event_id = ${e.id} and status in ('registered', 'pending', 'approved', 'awaiting_payment')`)).rows as [{ taken: number }];
     if (taken >= e.capacity) return;
     const [next] = await tx
       .select()
@@ -455,8 +521,9 @@ export class EventsService {
       .orderBy(asc(eventRegistrations.createdAt))
       .limit(1);
     if (!next) return;
-    await tx.update(eventRegistrations).set({ status: e.requiresApproval ? 'pending' : 'registered' }).where(eq(eventRegistrations.id, next.id));
-    await this.outbox.emit('event.promoted', { eventId: e.id, registrationId: next.id }, `event.promoted:${next.id}`, e.tenantId);
+    await tx.update(eventRegistrations).set({ status: e.feeAmount ? 'awaiting_payment' : e.requiresApproval ? 'pending' : 'registered' }).where(eq(eventRegistrations.id, next.id));
+    if (e.feeAmount) await this.requestPayment(tx, e, next.id, next.userId, next.membershipId);
+    await this.outbox.emit('event.promoted', { eventId: e.id, registrationId: next.id }, `event.promoted:${next.id}`, e.tenantId, tx);
   }
 
   /** The signed-in user's registrations across universities. */
@@ -467,8 +534,8 @@ export class EventsService {
       .from(eventRegistrations)
       .innerJoin(events, eq(events.id, eventRegistrations.eventId))
       .innerJoin(tenants, eq(tenants.id, events.tenantId))
-      .where(and(eq(eventRegistrations.userId, me.userId), inArray(eventRegistrations.status, ['registered', 'pending', 'approved', 'waitlisted', 'rejected'])))
+      .where(and(eq(eventRegistrations.userId, me.userId), inArray(eventRegistrations.status, ['registered', 'pending', 'approved', 'waitlisted', 'rejected', 'awaiting_payment'])))
       .orderBy(desc(events.startsAt));
-    return rows.map(({ r, ...x }) => ({ id: r.id, eventId: r.eventId, status: r.status, code: r.code, attended: !!r.attendedAt, ...x }));
+    return rows.map(({ r, ...x }) => ({ id: r.id, eventId: r.eventId, status: r.status, code: r.code, attended: !!r.attendedAt, paymentId: r.paymentRequestId, ...x }));
   }
 }

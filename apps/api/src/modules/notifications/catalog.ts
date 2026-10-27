@@ -4,7 +4,7 @@ import type { NotificationChannel } from '../../database/schema.js';
 // default, the variables a template may use and the default Persian texts. Tenants override
 // rules and templates in the database; the catalog itself only changes with the code.
 
-export type Recipient = 'user' | 'applicant' | 'assignee' | 'author' | 'reviewer' | 'managers' | 'released_reviewers' | 'audience' | 'channel_approvers' | 'registrant' | 'registrants';
+export type Recipient = 'user' | 'applicant' | 'assignee' | 'author' | 'reviewer' | 'managers' | 'released_reviewers' | 'audience' | 'channel_approvers' | 'registrant' | 'registrants' | 'payer' | 'finance';
 
 export interface VarDef {
   label: string;
@@ -40,7 +40,43 @@ const paperVars = { ...tenant, trackingCode: { label: 'شناسه پیگیری' 
 const newsVars = { ...tenant, postTitle: { label: 'عنوان خبر', sensitive: true }, channelName: { label: 'کانال' } };
 const eventVars = { ...tenant, eventTitle: { label: 'عنوان رویداد' }, eventDate: { label: 'تاریخ رویداد' }, statusLabel: { label: 'وضعیت ثبت‌نام' }, reason: { label: 'دلیل', sensitive: true } };
 
+const payVars = { ...tenant, paymentTitle: { label: 'عنوان پرداخت' }, trackingCode: { label: 'شناسه پیگیری' }, amount: { label: 'مبلغ (ریال)' }, dueDate: { label: 'مهلت' } };
+
 export const CATALOG = {
+  'payment.requested': {
+    label: 'درخواست پرداخت',
+    critical: false,
+    vars: payVars,
+    rules: [{ recipient: 'payer', channels: ['inapp', 'sms'] }],
+    templates: {
+      inapp: { subject: 'پرداخت لازم است: {{paymentTitle}}', body: 'برای «{{paymentTitle}}» مبلغ {{amount}} ریال باید تا {{dueDate}} پرداخت شود. شناسه پیگیری: {{trackingCode}}' },
+      sms: { body: '{{tenantName}}: پرداخت {{amount}} ریال بابت «{{paymentTitle}}» تا {{dueDate}} لازم است.' },
+    },
+  },
+  'payment.succeeded': {
+    label: 'پرداخت موفق',
+    critical: true,
+    vars: payVars,
+    rules: [{ recipient: 'payer', channels: ['inapp', 'sms'] }],
+    templates: {
+      inapp: { subject: 'پرداخت انجام شد', body: 'پرداخت {{amount}} ریال بابت «{{paymentTitle}}» با موفقیت انجام شد. شناسه پیگیری: {{trackingCode}}' },
+      sms: { body: '{{tenantName}}: پرداخت {{amount}} ریال با شناسه {{trackingCode}} موفق بود.' },
+    },
+  },
+  'payment.cancelled': {
+    label: 'لغو درخواست پرداخت',
+    critical: false,
+    vars: payVars,
+    rules: [{ recipient: 'payer', channels: ['inapp'] }],
+    templates: { inapp: { subject: 'درخواست پرداخت بسته شد', body: 'درخواست پرداخت «{{paymentTitle}}» ({{trackingCode}}) لغو شد یا مهلت آن گذشت.' } },
+  },
+  'payment.review': {
+    label: 'پرداخت نیازمند بررسی',
+    critical: false,
+    vars: payVars,
+    rules: [{ recipient: 'finance', channels: ['inapp'] }],
+    templates: { inapp: { subject: 'پرداخت نامشخص: {{trackingCode}}', body: 'نتیجه پرداخت {{trackingCode}} ({{amount}} ریال) نامشخص است و منتظر تصمیم کارشناس مالی است.' } },
+  },
   'news.submitted': {
     label: 'ارسال خبر برای تأیید',
     critical: false,

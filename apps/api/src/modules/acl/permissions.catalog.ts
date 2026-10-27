@@ -32,6 +32,8 @@ export const PERMISSIONS = {
   'report.view': { module: 'reporting', description: 'مشاهده گزارش‌ها' },
   'audit.view': { module: 'audit', description: 'مشاهده ممیزی سازمان' },
   'payment.view': { module: 'payment', description: 'مشاهده پرداخت‌ها' },
+  'payment.manage': { module: 'payment', description: 'تعرفه‌ها، تنظیم درگاه و تصمیم درباره پرداخت‌های نامشخص' },
+  'report.export': { module: 'reporting', description: 'خروجی گرفتن از گزارش‌ها' },
 } as const satisfies Record<string, { module: string; description: string; platformOnly?: boolean }>;
 
 export type PermissionCode = keyof typeof PERMISSIONS;
@@ -97,6 +99,7 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
     nameEn: 'News editor',
     permissions: ['news.view', 'news.create', 'news.approve', 'news.publish'],
   },
+  { key: 'finance_officer', nameFa: 'کارشناس مالی', nameEn: 'Finance officer', permissions: ['payment.view', 'payment.manage', 'report.view', 'report.export'] },
   { key: 'event_manager', nameFa: 'مسئول رویداد', nameEn: 'Event manager', permissions: ['event.manage', 'news.view', 'news.create'] },
 ];
 

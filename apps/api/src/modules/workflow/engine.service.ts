@@ -594,6 +594,17 @@ export class WorkflowEngine {
         const t = run.def.transitions.find((x) => x.from === stepId)!;
         return this.follow(run, t, stepId);
       }
+      case 'payment': {
+        // the payments module creates the request; the case waits until it reports back
+        run.c.currentSteps = [...run.c.currentSteps, stepId];
+        await this.event(run, { type: 'entered', stepId });
+        await this.outbox.emit(
+          'workflow.payment',
+          { caseId: run.c.id, stepId, serviceKey: step.serviceKey, deadlineDays: step.deadlineDays, applicantMembershipId: run.c.applicantMembershipId, title: step.title },
+          `workflow.payment:${run.c.id}:${stepId}:${run.c.lockVersion}:${run.hops}`,
+        );
+        return;
+      }
       case 'end':
         await this.event(run, { type: 'entered', stepId });
         return this.close(run, step.outcome);
@@ -714,6 +725,22 @@ export class WorkflowEngine {
     await this.event(run, { type: 'expired', stepId });
     await this.close(run, category);
     await this.save(run);
+  }
+
+  /**
+   * PAY-06/08: the payment result moves a case waiting on a payment step. Idempotent — a case that
+   * already left the step (repeated bank callback, reconciliation) is left alone.
+   */
+  async resumePayment(tx: Executor, caseId: string, stepId: string, outcome: 'paid' | 'unpaid'): Promise<boolean> {
+    const [c] = await tx.select().from(cases).where(eq(cases.id, caseId)).for('update').limit(1);
+    if (!c || !OPEN.includes(c.statusCategory) || !c.currentSteps.includes(stepId)) return false;
+    await tx.update(cases).set({ lockVersion: sql`${cases.lockVersion} + 1` }).where(eq(cases.id, caseId));
+    const run = this.newRun(tx, c, await this.definitionOf(tx, c.workflowVersionId));
+    run.c.currentSteps = run.c.currentSteps.filter((s) => s !== stepId);
+    await this.event(run, { type: 'system', stepId, action: outcome });
+    await this.follow(run, this.pick(run, stepId, outcome), stepId);
+    await this.save(run);
+    return true;
   }
 
   // ── shared helpers (also used by CasesService) ───────────────────────────

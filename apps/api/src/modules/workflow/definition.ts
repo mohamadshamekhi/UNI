@@ -60,6 +60,13 @@ export const stepSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('decision') }),
   z.object({ ...base, type: z.literal('parallel'), branches: z.array(id).min(2).max(6), join: z.enum(['all', 'any']).default('all') }),
   z.object({ ...base, type: z.literal('system'), task: z.enum(['notify', 'request_payment', 'tag', 'thesis']), params: z.record(z.string(), z.unknown()).default({}) }),
+  /** PAY-08: the case waits here until the payer pays (`paid`) or the request lapses (`unpaid`) */
+  z.object({
+    ...base,
+    type: z.literal('payment'),
+    serviceKey: z.string().regex(/^[a-z0-9_.:-]{2,80}$/),
+    deadlineDays: z.number().int().min(1).max(60).default(7),
+  }),
   z.object({ ...base, type: z.literal('end'), outcome: z.enum(['success', 'failure']) }),
 ]);
 

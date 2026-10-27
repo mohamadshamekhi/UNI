@@ -104,6 +104,12 @@ export function validateDefinition(raw: unknown, ctx: ValidationContext): { ok: 
     if ((s.type === 'system' || s.type === 'parallel') && out.length !== 1) {
       issues.push({ code: 'single_exit', message: `مرحله «${s.id}» باید دقیقاً یک انتقال خروجی داشته باشد.`, path: s.id });
     }
+    if (s.type === 'payment') {
+      const actions = new Set(out.map((t) => t.action));
+      if (!actions.has('paid') || !actions.has('unpaid') || out.some((t) => t.action !== 'paid' && t.action !== 'unpaid')) {
+        issues.push({ code: 'payment_exits', message: `مرحله پرداخت «${s.id}» باید دو خروجی «paid» و «unpaid» داشته باشد.`, path: s.id });
+      }
+    }
     if (s.type === 'parallel') {
       for (const b of s.branches) {
         const st = steps.get(b);

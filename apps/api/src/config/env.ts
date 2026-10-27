@@ -10,6 +10,8 @@ const schema = z.object({
   TENANT_BASE_DOMAIN: z.string().default('uni.localhost'),
   /** public portal origin, for links sent outside the apps (guest reviewer invitations) */
   PORTAL_URL: z.string().url().default('http://localhost:3000'),
+  /** public API origin, for pages served by the API itself (sandbox payment gateway) */
+  API_PUBLIC_URL: z.string().url().default('http://localhost:4000'),
 
   DATABASE_URL: z.string().url(),
   DATABASE_SYSTEM_URL: z.string().url(),

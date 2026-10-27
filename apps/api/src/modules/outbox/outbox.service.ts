@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import { requestContext } from '../../common/context/request-context.js';
-import { DbService } from '../../database/db.service.js';
+import { DbService, type Executor } from '../../database/db.service.js';
 import { outboxEvents } from '../../database/schema.js';
 
 export type OutboxHandler = (event: { id: number; tenantId: string | null; type: string; payload: Record<string, unknown> }) => Promise<void>;
@@ -27,11 +27,14 @@ export class OutboxService implements OnApplicationBootstrap, OnModuleDestroy {
     this.handlers.set(type, [...(this.handlers.get(type) ?? []), handler]);
   }
 
-  /** `tenantId` overrides the request tenant (cross-tenant writes such as event registrations). */
-  async emit(type: string, payload: Record<string, unknown>, idempotencyKey: string, tenantId: string | null = requestContext.find()?.tenant?.id ?? null) {
-    await this.db.run((tx) =>
-      tx.insert(outboxEvents).values({ tenantId, type, payload, idempotencyKey }).onConflictDoNothing(),
-    );
+  /**
+   * `tenantId` overrides the request tenant (cross-tenant writes such as event registrations); `tx`
+   * writes inside a caller's transaction (background handlers have no request transaction).
+   */
+  async emit(type: string, payload: Record<string, unknown>, idempotencyKey: string, tenantId: string | null = requestContext.find()?.tenant?.id ?? null, tx?: Executor) {
+    const insert = (x: Executor) => x.insert(outboxEvents).values({ tenantId, type, payload, idempotencyKey }).onConflictDoNothing();
+    if (tx) await insert(tx);
+    else await this.db.run(insert);
   }
 
   onApplicationBootstrap() {

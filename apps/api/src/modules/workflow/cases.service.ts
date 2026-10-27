@@ -383,7 +383,7 @@ function mainPath(def: WorkflowDefinition): { stepId: string; title: string }[] 
     seen.add(cur);
     const step = def.steps.find((s) => s.id === cur);
     if (!step) break;
-    if (step.type === 'human' || step.type === 'end') out.push({ stepId: step.id, title: step.title });
+    if (step.type === 'human' || step.type === 'payment' || step.type === 'end') out.push({ stepId: step.id, title: step.title });
     if (step.type === 'parallel') out.push({ stepId: step.id, title: step.title });
     const exits = def.transitions.filter((t) => t.from === cur && t.to !== BUILTIN_APPLICANT);
     // prefer the "approve"-like exit, then the otherwise branch of a decision

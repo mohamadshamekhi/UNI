@@ -706,7 +706,7 @@ export const newsEvents = pgTable('news_events', {
 });
 
 export type EventStatus = 'draft' | 'published' | 'registration_open' | 'registration_closed' | 'held' | 'cancelled';
-export type RegistrationStatus = 'registered' | 'pending' | 'approved' | 'rejected' | 'cancelled' | 'waitlisted';
+export type RegistrationStatus = 'registered' | 'pending' | 'approved' | 'rejected' | 'cancelled' | 'waitlisted' | 'awaiting_payment';
 
 export interface RegistrationRule {
   members?: boolean;
@@ -761,5 +761,107 @@ export const eventRegistrations = pgTable('event_registrations', {
   attendedAt: ts('attended_at'),
   decidedAt: ts('decided_at'),
   cancelledAt: ts('cancelled_at'),
+  paymentRequestId: uuid('payment_request_id'),
   createdAt: createdAt(),
 });
+
+// ── payments (phase 6) ─────────────────────────────────────────────────────
+
+export type PaymentStatus = 'created' | 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'review' | 'refunded';
+export type TransactionStatus = 'started' | 'succeeded' | 'failed' | 'unknown' | 'cancelled';
+export type PaymentRefType = 'case' | 'event_registration' | 'manual';
+
+const rial = (name: string) => bigint(name, { mode: 'number' });
+
+export const feeSchedules = pgTable('fee_schedules', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  serviceKey: text('service_key').notNull(),
+  title: text('title').notNull(),
+  amount: rial('amount').notNull(),
+  effectiveFrom: ts('effective_from').notNull().defaultNow(),
+  version: integer('version').notNull(),
+  createdBy: uuid('created_by'),
+  createdAt: createdAt(),
+});
+
+export const gatewayConfigs = pgTable('gateway_configs', {
+  tenantId: uuid('tenant_id').primaryKey(),
+  adapter: text('adapter').notNull(),
+  merchantId: text('merchant_id'),
+  secretEncrypted: text('secret_encrypted'),
+  active: boolean('active').notNull().default(true),
+  updatedBy: uuid('updated_by'),
+  updatedAt: updatedAt(),
+});
+
+export const paymentRequests = pgTable('payment_requests', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  trackingCode: text('tracking_code').notNull(),
+  serviceKey: text('service_key').notNull(),
+  feeScheduleId: uuid('fee_schedule_id'),
+  title: text('title').notNull(),
+  amount: rial('amount').notNull(),
+  payerUserId: uuid('payer_user_id').notNull(),
+  payerMembershipId: uuid('payer_membership_id'),
+  refType: text('ref_type').$type<PaymentRefType>().notNull(),
+  refId: uuid('ref_id'),
+  refStepId: text('ref_step_id'),
+  status: text('status').$type<PaymentStatus>().notNull().default('created'),
+  idempotencyKey: text('idempotency_key').notNull(),
+  expiresAt: ts('expires_at'),
+  paidAt: ts('paid_at'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+  lockVersion: integer('lock_version').notNull().default(0),
+});
+
+export const paymentTransactions = pgTable('payment_transactions', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  requestId: uuid('request_id').notNull(),
+  adapter: text('adapter').notNull(),
+  amount: rial('amount').notNull(),
+  authority: text('authority'),
+  referenceId: text('reference_id'),
+  status: text('status').$type<TransactionStatus>().notNull().default('started'),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  verifyPayload: jsonb('verify_payload').$type<Record<string, unknown>>(),
+  startedAt: ts('started_at').notNull().defaultNow(),
+  finishedAt: ts('finished_at'),
+  checkedAt: ts('checked_at'),
+});
+
+export const paymentReceipts = pgTable('payment_receipts', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull(),
+  requestId: uuid('request_id').notNull(),
+  transactionId: uuid('transaction_id').notNull(),
+  receiptNo: text('receipt_no').notNull(),
+  amount: rial('amount').notNull(),
+  referenceId: text('reference_id'),
+  issuedAt: ts('issued_at').notNull().defaultNow(),
+});
+
+export const paymentEvents = pgTable('payment_events', {
+  id: bigint('id', { mode: 'number' }).primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  requestId: uuid('request_id').notNull(),
+  type: text('type').notNull(),
+  data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
+  actorUserId: uuid('actor_user_id'),
+  occurredAt: ts('occurred_at').notNull().defaultNow(),
+});
+
+export const newsPostViews = pgTable(
+  'news_post_views',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    postId: uuid('post_id').notNull(),
+    day: date('day').notNull(),
+    views: integer('views').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.postId, t.day] })],
+);

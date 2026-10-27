@@ -92,6 +92,14 @@ export class DbService implements OnModuleDestroy {
     }
   }
 
+  /**
+   * Background work for one tenant (outbox handlers, sweeps): one RLS transaction plus a request
+   * context, so services that read the context (outbox, audit) write into the same transaction.
+   */
+  background<T>(tenantId: string, label: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+    return this.transaction({ tenantId }, (tx) => requestContext.run({ requestId: label, tenant: { id: tenantId, slug: '', status: 'active' }, tx }, () => fn(tx)));
+  }
+
   async onModuleDestroy() {
     await Promise.all([this.appPool.end(), this.systemPool.end()]);
   }

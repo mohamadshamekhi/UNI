@@ -52,6 +52,10 @@ const DIRECT: NotificationEvent[] = [
   'event.registration.decided',
   'event.promoted',
   'event.cancelled',
+  'payment.requested',
+  'payment.succeeded',
+  'payment.cancelled',
+  'payment.review',
 ];
 
 const REG_STATUS: Record<string, string> = {
@@ -236,6 +240,7 @@ export class NotificationsService implements OnModuleInit, OnApplicationBootstra
     if (event.startsWith('paper.')) return this.paperContext(event, tenantId, t, timeZone, p);
     if (event.startsWith('news.')) return this.newsContext(tenantId, t, timeZone, p);
     if (event.startsWith('event.')) return this.eventContext(tenantId, t, timeZone, p);
+    if (event.startsWith('payment.')) return this.paymentContext(tenantId, t, timeZone, p);
 
     const caseId = p.caseId as string;
     const [c] = await db
@@ -401,6 +406,37 @@ export class NotificationsService implements OnModuleInit, OnApplicationBootstra
       ).rows.map((x) => x.user_id);
     }
     return ctx;
+  }
+
+  /** Payment events: the payer, and finance officers (payment.manage) for requests needing review. */
+  private async paymentContext(tenantId: string, t: { nameFa: string; slug: string }, timeZone: string, p: Record<string, unknown>): Promise<Context | null> {
+    const db = this.db.sys;
+    const r = (
+      await db.execute<{ id: string; title: string; tracking_code: string; amount: string; payer_user_id: string; expires_at: Date | null }>(sql`
+        select id, title, tracking_code, amount::text, payer_user_id, expires_at from payment_requests where id = ${p.requestId as string} and tenant_id = ${tenantId}`)
+    ).rows[0];
+    if (!r) return null;
+    const finance = (
+      await db.execute<{ user_id: string }>(sql`
+        select distinct m.user_id from role_assignments ra
+        join role_permissions rp on rp.role_id = ra.role_id and rp.permission_code = 'payment.manage'
+        join memberships m on m.id = ra.membership_id and m.status = 'active'
+        where ra.tenant_id = ${tenantId} and ra.revoked_at is null and ra.valid_from <= now() and (ra.valid_to is null or ra.valid_to > now())
+        limit 200`)
+    ).rows.map((x) => x.user_id);
+    return {
+      tenantId,
+      timeZone,
+      vars: {
+        tenantName: t.nameFa,
+        paymentTitle: r.title,
+        trackingCode: r.tracking_code,
+        amount: new Intl.NumberFormat('fa-IR').format(Number(r.amount)),
+        dueDate: faDate(r.expires_at ? new Date(r.expires_at) : null, timeZone),
+      },
+      recipients: { payer: [r.payer_user_id], finance },
+      links: { payer: `/${t.slug}/payments/${r.id}`, finance: `/t/${t.slug}/payments/${r.id}` },
+    };
   }
 
   /** Users who can act on a task: the named member, or every holder of the role in scope (never the applicant). */

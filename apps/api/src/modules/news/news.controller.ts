@@ -126,6 +126,7 @@ class EventBody {
   @IsOptional() @IsBoolean() allowCancel?: boolean;
   @IsOptional() @IsArray() form?: unknown[];
   @IsOptional() @IsUUID() newsPostId?: string | null;
+  @IsOptional() @IsInt() @Min(1000) @Max(100_000_000_000) feeAmount?: number | null;
 }
 
 class EventPatch {
@@ -149,6 +150,7 @@ class EventPatch {
   @IsOptional() @IsBoolean() allowCancel?: boolean;
   @IsOptional() @IsArray() form?: unknown[];
   @IsOptional() @IsUUID() newsPostId?: string | null;
+  @IsOptional() @IsInt() @Min(1000) @Max(100_000_000_000) feeAmount?: number | null;
 }
 
 class EventStatusBody {
