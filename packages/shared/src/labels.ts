@@ -1,4 +1,4 @@
-import type { CaseStatusCategory, ThesisStatus, MembershipKind, MembershipStatus, ScopeType, TenantStatus } from "./types";
+import type { CaseStatusCategory, PaperStatus, Recommendation, ReviewMode, ReviewStatus, ThesisStatus, MembershipKind, MembershipStatus, ScopeType, TenantStatus } from "./types";
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -144,3 +144,72 @@ export const THESIS_STATUS: Record<ThesisStatus, { label: string; tone: Tone }> 
 
 export const DEGREE: Record<string, string> = { bsc: "کارشناسی", msc: "کارشناسی ارشد", phd: "دکتری" };
 export const MY_ROLE: Record<string, string> = { advisor: "استاد راهنما", co_advisor: "استاد مشاور", reviewer: "داور" };
+
+export const PAPER_STATUS: Record<PaperStatus, { label: string; tone: Tone }> = {
+  draft: { label: "پیش‌نویس", tone: "neutral" },
+  submitted: { label: "در انتظار بررسی اولیه", tone: "info" },
+  under_review: { label: "در حال داوری", tone: "info" },
+  reviews_done: { label: "در انتظار تصمیم", tone: "warning" },
+  revision_requested: { label: "در انتظار اصلاح", tone: "warning" },
+  revised: { label: "اصلاح‌شده و ارسال مجدد", tone: "info" },
+  accepted_conditional: { label: "پذیرش مشروط", tone: "success" },
+  accepted: { label: "پذیرفته‌شده", tone: "success" },
+  rejected: { label: "ردشده", tone: "danger" },
+  withdrawn: { label: "انصراف", tone: "neutral" },
+};
+
+export const REVIEW_MODE: Record<ReviewMode, { label: string; hint: string }> = {
+  open: { label: "آشکار", hint: "نویسنده و داوران یکدیگر را می‌شناسند." },
+  single_blind: { label: "یک‌سوکور", hint: "داور نویسنده را می‌شناسد؛ نویسنده داور را نه." },
+  double_blind: { label: "دوسوکور", hint: "هیچ‌کدام دیگری را نمی‌شناسند؛ داور نسخه پاک‌سازی‌شده را می‌بیند." },
+};
+
+export const REVIEW_STATUS: Record<ReviewStatus, { label: string; tone: Tone }> = {
+  invited: { label: "دعوت‌شده", tone: "info" },
+  accepted: { label: "در حال داوری", tone: "warning" },
+  declined: { label: "ردِ دعوت", tone: "neutral" },
+  submitted: { label: "نظر ثبت شد", tone: "success" },
+  cancelled: { label: "لغوشده", tone: "neutral" },
+};
+
+export const RECOMMENDATION: Record<Recommendation, { label: string; tone: Tone }> = {
+  accept: { label: "پذیرش", tone: "success" },
+  accept_conditional: { label: "پذیرش مشروط", tone: "success" },
+  minor_revision: { label: "اصلاح جزئی", tone: "warning" },
+  major_revision: { label: "اصلاح اساسی", tone: "warning" },
+  reject: { label: "رد", tone: "danger" },
+};
+
+export const COI: Record<string, string> = {
+  author: "نویسنده مقاله",
+  co_author: "هم‌نویسنده",
+  declared: "اعلام‌شده توسط نویسنده",
+  same_unit: "هم‌واحد با نویسنده",
+  past_coauthor: "هم‌نویسنده قبلی",
+};
+
+export const PAPER_EVENT: Record<string, string> = {
+  submitted: "ثبت مقاله",
+  "screen.send_to_review": "ارجاع به داوری",
+  "screen.request_fix": "درخواست اصلاح اولیه",
+  "screen.reject": "رد در بررسی اولیه",
+  "screen.forward": "ارجاع به مسئول دیگر",
+  "review.started": "آغاز داوری",
+  "reviewers.assigned": "دعوت از داوران",
+  "guest.invited": "دعوت از داور مهمان",
+  "review.accepted": "پذیرش دعوت داوری",
+  "review.declined": "رد دعوت داوری",
+  "review.submitted": "ثبت نظر داور",
+  "review.cancelled": "لغو دعوت داوری",
+  "reviews.done": "تکمیل داوری‌ها",
+  "revision.requested": "درخواست اصلاح",
+  revised: "ارسال نسخه اصلاح‌شده",
+  decided: "تصمیم نهایی",
+  withdrawn: "انصراف نویسنده",
+};
+
+export const SCORE_CRITERIA: { key: string; label: string }[] = [
+  { key: "novelty", label: "نوآوری" },
+  { key: "methodology", label: "روش‌شناسی" },
+  { key: "writing", label: "نگارش" },
+];

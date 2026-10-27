@@ -14,7 +14,7 @@ import {
  * httpOnly cookie, refreshing it once on 401. Only /v1/* paths are forwarded.
  */
 // x-forwarded-for comes from the edge proxy in front of Next; the API trusts it for per-IP limits
-const FORWARD_REQUEST_HEADERS = ["content-type", "x-tenant", "x-request-id", "accept", "x-forwarded-for", "x-mobile-proof"];
+const FORWARD_REQUEST_HEADERS = ["content-type", "x-tenant", "x-request-id", "accept", "x-forwarded-for", "x-mobile-proof", "x-guest-token"];
 const FORWARD_RESPONSE_HEADERS = ["content-type", "content-disposition", "content-length", "x-request-id", "cache-control"];
 
 async function forward(req: NextRequest, path: string[], body: ArrayBuffer | undefined, token?: string) {

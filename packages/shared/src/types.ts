@@ -334,3 +334,142 @@ export interface Thesis {
   updatedAt: string;
   myRole?: "advisor" | "co_advisor" | "reviewer";
 }
+
+// ── papers (phase 4) ────────────────────────────────────────────────────────
+
+export type ReviewMode = "open" | "single_blind" | "double_blind";
+export type PaperStatus =
+  | "draft"
+  | "submitted"
+  | "under_review"
+  | "reviews_done"
+  | "revision_requested"
+  | "revised"
+  | "accepted_conditional"
+  | "accepted"
+  | "rejected"
+  | "withdrawn";
+export type ReviewStatus = "invited" | "accepted" | "declined" | "submitted" | "cancelled";
+export type Recommendation = "accept" | "accept_conditional" | "minor_revision" | "major_revision" | "reject";
+
+export interface PaperTrack {
+  id: string;
+  nameFa: string;
+  description: string | null;
+  reviewMode: ReviewMode;
+  maxRounds: number;
+  reviewerDays: number;
+  minReviewers: number;
+  reviewerDownload: boolean;
+  active: boolean;
+}
+
+export interface FileRef {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  scanStatus: string;
+}
+
+interface PaperBase {
+  id: string;
+  trackingCode: string | null;
+  title: string;
+  abstract: string | null;
+  keywords: string[];
+  degree: string;
+  field: string | null;
+  status: PaperStatus;
+  round: number;
+  reviewMode: ReviewMode;
+  revisionDueAt: string | null;
+  decision: string | null;
+  decisionNote: string | null;
+  lockVersion: number;
+  trackName: string;
+  coAuthors: { fullName: string; membershipId?: string; affiliation?: string }[];
+  conflicts: { membershipIds?: string[]; note?: string };
+}
+
+export interface AuthorPaper extends PaperBase {
+  view: "author";
+  submittedAt: string | null;
+  canWithdraw: boolean;
+  canRevise: boolean;
+  versions: { round: number; file: FileRef | null; responseLetter: string | null; responseFile: FileRef | null; createdAt: string | null }[];
+  reviews: { round: number; reviewer: string; commentsToAuthor: string | null }[];
+  history: { type: string; round: number; date: string | null; note: string | null; data: Record<string, unknown> }[];
+}
+
+export interface ReviewerPaperView {
+  view: "reviewer";
+  review: {
+    id: string;
+    status: ReviewStatus;
+    round: number;
+    alias: string;
+    dueAt: string | null;
+    recommendation: Recommendation | null;
+    commentsToAuthor: string | null;
+    confidentialComments: string | null;
+    scores: Record<string, number>;
+    canRespond: boolean;
+    canSubmit: boolean;
+  };
+  paper: {
+    title: string;
+    abstract: string | null;
+    keywords: string[];
+    degree: string;
+    field: string | null;
+    trackName: string;
+    reviewMode: ReviewMode;
+    closed: boolean;
+    author: { fullName: string | null; coAuthors: string[] } | null;
+  };
+  manuscript: { fileId: string | null; name: string; sizeBytes: number; downloadAllowed: boolean; ready: boolean } | null;
+  responseLetter: string | null;
+  previousRounds: { round: number; recommendation: Recommendation | null; commentsToAuthor: string | null }[];
+}
+
+export interface ManagerReview {
+  id: string;
+  round: number;
+  alias: string;
+  reviewer:
+    | { type: "member"; membershipId: string; fullName: string | null }
+    | { type: "guest"; guestId: string | null; fullName: string | null; expiresAt: string | null; revoked: boolean };
+  status: ReviewStatus;
+  dueAt: string;
+  invitedAt: string;
+  respondedAt: string | null;
+  submittedAt: string | null;
+  declineReason: string | null;
+  recommendation: Recommendation | null;
+  commentsToAuthor: string | null;
+  confidentialComments: string | null;
+  scores: Record<string, number>;
+  attachment: FileRef | null;
+  conflictsAcknowledged: string[] | null;
+}
+
+export interface ManagerPaper extends PaperBase {
+  view: "manager";
+  submittedAt: string | null;
+  track: { maxRounds: number; minReviewers: number; reviewerDays: number };
+  author: { membershipId: string; fullName: string | null; memberNo: string | null };
+  manager: { membershipId: string; fullName: string | null } | null;
+  versions: { round: number; original: FileRef | null; reviewCopy: FileRef | null; scrubReport: Record<string, unknown>; responseLetter: string | null; responseFile: FileRef | null; createdAt: string }[];
+  reviews: ManagerReview[];
+  history: { type: string; round: number; occurredAt: string; audience: string; actorName: string | null; note: string | null; data: Record<string, unknown> }[];
+}
+
+export interface ReviewerCandidate {
+  membership_id: string;
+  full_name: string;
+  unit_name: string | null;
+  active: number;
+  done: number;
+  conflicts: string[];
+}
