@@ -19,8 +19,17 @@ export interface TestApp {
 }
 
 let seq = 0;
-/** Unique Iranian mobile per call (valid MCI prefix). */
-export const nextMobile = () => `0912${String(Date.now() % 1000).padStart(3, '0')}${String(++seq).padStart(4, '0')}`;
+/**
+ * Unique Iranian mobile per call (valid MCI prefix). Random rather than sequential: test files run in
+ * parallel and Redis keeps per-mobile OTP limits across runs, so sequential numbers collided.
+ */
+const usedMobiles = new Set<string>();
+export const nextMobile = (): string => {
+  const m = `0912${String(Math.floor(Math.random() * 1e7)).padStart(7, '0')}`;
+  if (usedMobiles.has(m)) return nextMobile();
+  usedMobiles.add(m);
+  return m;
+};
 export const toE164 = (local: string) => `+98${local.slice(1)}`;
 export const uniq = (p: string) => `${p}${Date.now().toString(36)}${++seq}`;
 
