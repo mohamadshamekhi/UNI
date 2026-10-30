@@ -66,3 +66,4 @@ ClamAV is behind a compose profile (`docker compose --profile scan up -d clamav`
 - Real SMS provider adapter (only console/memory now; needs the university's provider).
 - CI/CD, Dockerfiles, backups and monitoring (scheduled for the end of phase 1).
 - 2FA is optional (platform admins get a banner); enforcing it for platform admins is a policy switch still to decide.
+# UNI
