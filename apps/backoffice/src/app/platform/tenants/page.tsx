@@ -13,7 +13,7 @@ import { PageHeader, Table, Td, Th } from "@uni/shared/ui/layout";
 import { EmptyState, QueryView } from "@uni/shared/ui/states";
 import { useToast } from "@uni/shared/ui/toast";
 import { api } from "@uni/shared/api";
-import { fmtDate } from "@uni/shared/format";
+import { fmtDate, fmtNum } from "@uni/shared/format";
 import { MODULES, TENANT_STATUS } from "@uni/shared/labels";
 import type { Tenant } from "@uni/shared/types";
 
@@ -52,6 +52,7 @@ function TenantsInner() {
                 <Th>نام</Th>
                 <Th>شناسه</Th>
                 <Th>وضعیت</Th>
+                <Th>اعضای فعال</Th>
                 <Th>ماژول‌ها</Th>
                 <Th>تاریخ ایجاد</Th>
               </tr>
@@ -72,6 +73,10 @@ function TenantsInner() {
                   </Td>
                   <Td>
                     <Badge tone={TENANT_STATUS[t.status].tone}>{TENANT_STATUS[t.status].label}</Badge>
+                  </Td>
+                  <Td className="tabular whitespace-nowrap">
+                    {fmtNum(t.stats?.activeMembers ?? 0)}
+                    {!!t.stats?.pendingMembers && <span className="block text-xs text-warning">{fmtNum(t.stats.pendingMembers)} در انتظار بررسی</span>}
                   </Td>
                   <Td className="text-xs text-muted-foreground">{t.enabledModules.length ? t.enabledModules.map((m) => MODULES[m] ?? m).join("، ") : "—"}</Td>
                   <Td className="tabular">{fmtDate(t.createdAt)}</Td>

@@ -5,11 +5,12 @@ import { Logo } from "@uni/shared/ui/logo";
 import { ErrorState, Loading } from "@uni/shared/ui/states";
 import { NotificationBell } from "@uni/shared/ui/notifications";
 import { ThemeToggle } from "@uni/shared/ui/theme";
-import { CalendarDays, ChevronLeft, FileText, Newspaper, Wallet, FolderOpen, GraduationCap, LogIn, LogOut, Menu, UserRound, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, LogIn, LogOut, Menu, Newspaper, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { CONTAINER, TenantMark } from "@/components/site/tenant-mark";
+import { AccountMenu, logout, PANEL_LINKS } from "@/components/site/user-panel";
 import { usePublicTenant, useSession, useTenantSlug, type PublicTenant } from "@/lib/tenant";
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -76,7 +77,13 @@ export default function TenantLayout({ children }: { children: ReactNode }) {
 /** Mirrors the platform site header: transparent over the hero, frosted once scrolled. */
 function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: PublicTenant; overHero: boolean }) {
   const session = useSession();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [lastPath, setLastPath] = useState(pathname);
+  if (lastPath !== pathname) {
+    setLastPath(pathname);
+    setOpen(false);
+  }
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -87,10 +94,6 @@ function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: Public
   const solid = !overHero || scrolled || open;
   const name = tenant.branding.displayName || tenant.nameFa;
   const link = solid ? "text-muted-foreground hover:text-foreground" : "text-white/75 hover:text-white";
-  const logout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.assign(`/${slug}`);
-  };
 
   return (
     <header
@@ -103,47 +106,28 @@ function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: Public
           <TenantMark slug={slug} tenant={tenant} />
           <span className="truncate">{name}</span>
         </Link>
-        <nav aria-label="حساب کاربری" className="ms-auto hidden items-center gap-1 xl:flex">
-          <Link href="/" className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
-            <Logo className="size-5" />
-            همه دانشگاه‌ها
-          </Link>
-          <Link href={`/${slug}/news`} className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
-            <Newspaper aria-hidden className="size-4" />
-            اخبار
-          </Link>
-          <Link href={`/${slug}/events`} className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
-            <CalendarDays aria-hidden className="size-4" />
-            رویدادها
-          </Link>
+        <nav aria-label="بخش‌های سایت" className="ms-6 hidden items-center gap-1 md:flex">
+          {[
+            { href: `/${slug}/news`, label: "اخبار", icon: Newspaper },
+            { href: `/${slug}/events`, label: "رویدادها", icon: CalendarDays },
+          ].map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              aria-current={pathname.startsWith(l.href) && !pathname.startsWith(`/${slug}/events/mine`) ? "page" : undefined}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors aria-[current=page]:font-semibold ${link}`}
+            >
+              <l.icon aria-hidden className="size-4" />
+              {l.label}
+            </Link>
+          ))}
+        </nav>
+        <div className="ms-auto hidden items-center gap-1 md:flex">
           <ThemeToggle className={solid ? "hover:bg-muted" : "hover:bg-white/10"} />
           {session.data ? (
             <>
               <NotificationBell tenant={slug} inboxHref={`/${slug}/notifications`} resolve={portalLink} className={solid ? "hover:bg-muted" : "hover:bg-white/10"} />
-              <Link href={`/${slug}/me`} className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
-                <UserRound aria-hidden className="size-4" />
-                وضعیت من
-              </Link>
-              <Link href={`/${slug}/cases`} className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
-                <FolderOpen aria-hidden className="size-4" />
-                پرونده‌های من
-              </Link>
-              <Link href={`/${slug}/thesis`} className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
-                <GraduationCap aria-hidden className="size-4" />
-                پرونده تحصیلی
-              </Link>
-              <Link href={`/${slug}/papers`} className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
-                <FileText aria-hidden className="size-4" />
-                مقالات
-              </Link>
-              <Link href={`/${slug}/payments`} className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${link}`}>
-                <Wallet aria-hidden className="size-4" />
-                پرداخت‌ها
-              </Link>
-              <button type="button" onClick={logout} className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors ${solid ? "text-danger hover:bg-danger-bg" : "text-white/75 hover:text-white"}`}>
-                <LogOut aria-hidden className="size-4" />
-                خروج
-              </button>
+              <AccountMenu slug={slug} fullName={session.data.fullName} solid={solid} />
             </>
           ) : (
             <>
@@ -159,8 +143,8 @@ function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: Public
               </Link>
             </>
           )}
-        </nav>
-        <div className="ms-auto flex items-center gap-1 xl:hidden">
+        </div>
+        <div className="ms-auto flex items-center gap-1 md:hidden">
           <ThemeToggle className={solid ? "hover:bg-muted" : "hover:bg-white/10"} />
           {session.data && <NotificationBell tenant={slug} inboxHref={`/${slug}/notifications`} resolve={portalLink} className={solid ? "hover:bg-muted" : "hover:bg-white/10"} />}
           <button
@@ -176,25 +160,34 @@ function TenantHeader({ slug, tenant, overHero }: { slug: string; tenant: Public
         </div>
       </div>
       {open && (
-        <nav id="tenant-nav" aria-label="حساب کاربری" className={`${CONTAINER} border-t border-border pb-4 xl:hidden`}>
+        <nav id="tenant-nav" aria-label="منو" className={`${CONTAINER} max-h-[calc(100dvh-4rem)] overflow-y-auto border-t border-border pb-4 md:hidden`}>
           {session.data ? (
             <>
-              <Link href={`/${slug}/me`} onClick={() => setOpen(false)} className="block px-2 py-3">وضعیت من</Link>
-              <Link href={`/${slug}/cases`} onClick={() => setOpen(false)} className="block px-2 py-3">پرونده‌های من</Link>
-              <Link href={`/${slug}/thesis`} onClick={() => setOpen(false)} className="block px-2 py-3">پرونده تحصیلی</Link>
-              <Link href={`/${slug}/papers`} onClick={() => setOpen(false)} className="block px-2 py-3">مقالات من</Link>
-              <Link href={`/${slug}/payments`} onClick={() => setOpen(false)} className="block px-2 py-3">پرداخت‌های من</Link>
-              <button type="button" onClick={logout} className="block w-full cursor-pointer px-2 py-3 text-start text-danger">خروج</button>
+              <p className="truncate px-2 pt-4 pb-2 text-sm font-bold">{session.data.fullName}</p>
+              {PANEL_LINKS.map((l) => (
+                <Link key={l.path} href={`/${slug}/${l.path}`} onClick={() => setOpen(false)} className="flex min-h-11 items-center gap-2.5 px-2">
+                  <l.icon aria-hidden className="size-4 text-muted-foreground" />
+                  {l.label}
+                </Link>
+              ))}
             </>
           ) : (
-            <>
-              <Link href={`/${slug}/login`} onClick={() => setOpen(false)} className="block px-2 py-3">ورود</Link>
-              <Link href={`/${slug}/register`} onClick={() => setOpen(false)} className="mt-2 flex h-11 items-center justify-center rounded-full bg-primary font-semibold text-on-primary">ثبت‌نام</Link>
-            </>
+            <div className="flex gap-2 pt-4">
+              <Link href={`/${slug}/login`} onClick={() => setOpen(false)} className="flex h-11 flex-1 items-center justify-center rounded-full border border-border font-semibold">ورود</Link>
+              <Link href={`/${slug}/register`} onClick={() => setOpen(false)} className="flex h-11 flex-1 items-center justify-center rounded-full bg-primary font-semibold text-on-primary">ثبت‌نام</Link>
+            </div>
           )}
-          <Link href={`/${slug}/news`} onClick={() => setOpen(false)} className="block px-2 py-3">اخبار</Link>
-          <Link href={`/${slug}/events`} onClick={() => setOpen(false)} className="block px-2 py-3">رویدادها</Link>
-          <Link href="/" onClick={() => setOpen(false)} className="block px-2 py-3 text-muted-foreground">همه دانشگاه‌ها</Link>
+          <div className="mt-2 border-t border-border pt-2">
+            <Link href={`/${slug}/news`} onClick={() => setOpen(false)} className="flex min-h-11 items-center gap-2.5 px-2"><Newspaper aria-hidden className="size-4 text-muted-foreground" />اخبار</Link>
+            <Link href={`/${slug}/events`} onClick={() => setOpen(false)} className="flex min-h-11 items-center gap-2.5 px-2"><CalendarDays aria-hidden className="size-4 text-muted-foreground" />رویدادها</Link>
+            <Link href="/" onClick={() => setOpen(false)} className="flex min-h-11 items-center gap-2.5 px-2 text-muted-foreground"><Logo className="size-4" />همه دانشگاه‌ها</Link>
+          </div>
+          {session.data && (
+            <button type="button" onClick={() => void logout(slug)} className="mt-2 flex min-h-11 w-full cursor-pointer items-center gap-2.5 border-t border-border px-2 pt-2 text-danger">
+              <LogOut aria-hidden className="size-4" />
+              خروج
+            </button>
+          )}
         </nav>
       )}
     </header>

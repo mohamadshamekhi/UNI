@@ -9,10 +9,12 @@ describe('tenant isolation (TEN-02, RLS)', () => {
   let b: TenantFixture;
   let app: pg.Pool;
   let unitB: string;
+  let platformToken = '';
 
   beforeAll(async () => {
     t = await startApp();
     const platform = await createPlatformAdmin(t);
+    platformToken = platform.token;
     a = await createTenant(t, platform.token);
     b = await createTenant(t, platform.token);
     const unitA = (await createUnit(t, a, 'دانشکده الف')).id;
@@ -75,5 +77,16 @@ describe('tenant isolation (TEN-02, RLS)', () => {
   it('unknown or missing tenant is refused', async () => {
     await t.http.get('/v1/public/units').expect(400);
     await t.http.get('/v1/public/units').set({ 'x-tenant': 'nope-nope' }).expect(404);
+  });
+
+  it('platform admin sees aggregate numbers per university; university admins cannot', async () => {
+    const o = await t.http.get(`/v1/platform/tenants/${a.id}/overview`).set(as(platformToken)).expect(200);
+    expect(o.body.members.byStatus.pending_review).toBe(1);
+    expect(o.body.admins).toHaveLength(1);
+    // aggregates only: no personal records of members
+    expect(JSON.stringify(o.body)).not.toContain('علي رضايي');
+    const list = await t.http.get('/v1/platform/tenants').set(as(platformToken)).expect(200);
+    expect(list.body.find((x: { id: string }) => x.id === b.id).stats.pendingMembers).toBe(1);
+    await t.http.get(`/v1/platform/tenants/${a.id}/overview`).set(as(a.adminToken, a.slug)).expect(403);
   });
 });

@@ -1,13 +1,13 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, CalendarDays, CheckCircle2, Clock, MapPin, Users, Video, Wallet } from "lucide-react";
+import { ArrowRight, CalendarDays, CheckCircle2, Clock, FileText, MapPin, Users, Video, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { api, ApiError, errorMessage } from "@uni/shared/api";
 import { fmtDateTime, fmtNum, fmtRial } from "@uni/shared/format";
-import { EVENT_STATUS, REGISTRATION_STATUS } from "@uni/shared/labels";
+import { EVENT_STATUS, REGISTRATION_STATUS, REVIEW_MODE } from "@uni/shared/labels";
 import { Badge } from "@uni/shared/ui/badge";
 import { Button } from "@uni/shared/ui/button";
 import { FormFields, type FormValues } from "@uni/shared/ui/form-fields";
@@ -149,6 +149,33 @@ export default function EventPage() {
               </form>
             )}
             {error && e.mine && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
+            {e.callForPapers && (
+              <section aria-labelledby="cfp" className="mt-5 border-t border-border pt-5">
+                <h2 id="cfp" className="flex items-center gap-2 text-lg font-bold">
+                  <FileText aria-hidden className="size-5 text-primary" />
+                  فراخوان مقاله
+                </h2>
+                <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                  داوری {e.callForPapers.reviewMode ? REVIEW_MODE[e.callForPapers.reviewMode].label : ""}
+                  {e.callForPapers.deadline && <> · مهلت ارسال {fmtDateTime(e.callForPapers.deadline)}</>}
+                </p>
+                {!e.callForPapers.open ? (
+                  <p className="mt-2 text-sm text-muted-foreground">مهلت ارسال مقاله گذشته است.</p>
+                ) : !session.data ? (
+                  <Link href={`/${slug}/login?next=${encodeURIComponent(`/${slug}/events/${e.id}`)}`} className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-full border border-border text-sm font-semibold hover:bg-muted">
+                    ورود برای ارسال مقاله
+                  </Link>
+                ) : e.callForPapers.eligible ? (
+                  <Link href={`/${slug}/papers/new?event=${e.id}`} className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-full border border-primary text-sm font-semibold text-primary hover:bg-primary/5">
+                    ارسال مقاله به همایش
+                  </Link>
+                ) : (
+                  <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                    {e.callForPapers.ownMembersOnly ? "ارسال مقاله فقط برای اعضای دانشگاه برگزارکننده است." : "ارسال مقاله به این همایش برای گروه مشخصی است و شما در آن قرار ندارید."}
+                  </p>
+                )}
+              </section>
+            )}
           </aside>
         </div>
       )}

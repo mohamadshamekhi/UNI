@@ -26,6 +26,7 @@ interface Row {
   submitted_at: string;
   updated_at: string;
   track_name: string;
+  event_title: string | null;
   author_name: string;
   reviews_in: number;
   reviews_total: number;
@@ -48,8 +49,9 @@ function PapersInner() {
     router.replace(`?${next.toString()}`);
   };
   const list = useQuery({
-    queryKey: ["papers", slug, status, sp.get("q"), offset],
-    queryFn: () => api<{ items: Row[]; total: number }>("/v1/admin/papers", { tenant: slug, query: { status: status || undefined, q: sp.get("q") || undefined, limit: PAGE, offset } }),
+    queryKey: ["papers", slug, status, sp.get("q"), sp.get("event"), offset],
+    queryFn: () =>
+      api<{ items: Row[]; total: number }>("/v1/admin/papers", { tenant: slug, query: { status: status || undefined, q: sp.get("q") || undefined, eventId: sp.get("event") || undefined, limit: PAGE, offset } }),
   });
   return (
     <>
@@ -116,7 +118,7 @@ function PapersInner() {
                     </Td>
                     <Td>{p.author_name}</Td>
                     <Td>
-                      {p.track_name}
+                      {p.event_title ? `همایش «${p.event_title}»` : p.track_name}
                       <span className="block text-xs text-muted-foreground">{REVIEW_MODE[p.review_mode].label}</span>
                     </Td>
                     <Td><Badge tone={PAPER_STATUS[p.status].tone}>{PAPER_STATUS[p.status].label}</Badge></Td>

@@ -523,6 +523,7 @@ export const papers = pgTable('papers', {
   id: id(),
   tenantId: uuid('tenant_id').notNull(),
   trackId: uuid('track_id').notNull(),
+  eventId: uuid('event_id'),
   trackingCode: text('tracking_code'),
   authorMembershipId: uuid('author_membership_id').notNull(),
   managerMembershipId: uuid('manager_membership_id'),
@@ -742,6 +743,9 @@ export const events = pgTable('events', {
   feeAmount: bigint('fee_amount', { mode: 'number' }),
   certificateEnabled: boolean('certificate_enabled').notNull().default(false),
   paperTrackId: uuid('paper_track_id'),
+  paperDeadline: ts('paper_deadline'),
+  /** who may submit a paper (members / units / roles of the organising tenant); null = any member */
+  paperRule: jsonb('paper_rule').$type<RegistrationRule | null>(),
   newsPostId: uuid('news_post_id'),
   createdBy: uuid('created_by'),
   createdAt: createdAt(),

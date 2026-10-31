@@ -68,6 +68,7 @@ export default function EventsPage() {
                   <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge tone={EVENT_STATUS[e.status].tone}>{EVENT_STATUS[e.status].label}</Badge>
+                      {e.callForPapers && <Badge tone="info">فراخوان مقاله</Badge>}
                       {e.host && <span className="text-xs text-muted-foreground">میزبان: {e.host.nameFa}</span>}
                     </div>
                     <h2 className="line-clamp-2 font-bold leading-7 group-hover:text-primary">{e.title}</h2>

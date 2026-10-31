@@ -12,7 +12,6 @@ import {
   BookOpenText,
   CalendarDays,
   Check,
-  CircleDashed,
   CreditCard,
   FileSearch,
   GraduationCap,
@@ -276,9 +275,9 @@ export default function Home() {
                       >
                         <s.icon aria-hidden className="size-6" strokeWidth={1.7} />
                       </span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                        <CircleDashed aria-hidden className="size-3.5" />
-                        به‌زودی
+                      <span className="inline-flex items-center gap-1 rounded-full bg-success-bg px-2.5 py-1 text-xs font-medium text-success">
+                        <Check aria-hidden className="size-3.5" />
+                        فعال
                       </span>
                     </div>
                     <h3 className="mt-6 text-lg font-bold">{s.title}</h3>

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { requestContext } from '../../common/context/request-context.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { DbService, type Executor } from '../../database/db.service.js';
@@ -68,6 +68,7 @@ export class PaperViews {
         view: 'author' as const,
         ...this.base(p),
         trackName: track!.nameFa,
+        conference: await this.conference(tx, p.eventId),
         coAuthors: p.coAuthors,
         conflicts: p.conflicts,
         canWithdraw: !FINAL.includes(p.status),
@@ -204,6 +205,7 @@ export class PaperViews {
         ...this.base(p),
         submittedAt: p.submittedAt,
         trackName: track!.nameFa,
+        conference: await this.conference(tx, p.eventId),
         track: { maxRounds: track!.maxRounds, minReviewers: track!.minReviewers, reviewerDays: track!.reviewerDays },
         author: { membershipId: p.authorMembershipId, fullName: names.get(p.authorMembershipId) ?? null, memberNo: author?.memberNo ?? null },
         manager: p.managerMembershipId ? { membershipId: p.managerMembershipId, fullName: names.get(p.managerMembershipId) ?? null } : null,
@@ -244,6 +246,13 @@ export class PaperViews {
         history: events.map(({ e, actor }) => ({ type: e.type, round: e.round, occurredAt: e.occurredAt, audience: e.audience, actorName: actor, note: e.note, data: e.data })),
       };
     });
+  }
+
+  /** The conference (event) a paper was submitted to, if any (EVT-11). */
+  private async conference(tx: Executor, eventId: string | null) {
+    if (!eventId) return null;
+    const r = (await tx.execute<{ id: string; title: string }>(sql`select id, title from events where id = ${eventId}`)).rows[0];
+    return r ?? null;
   }
 }
 

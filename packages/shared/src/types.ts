@@ -42,6 +42,8 @@ export interface Tenant {
   settings: TenantSettings;
   enabledModules: string[];
   createdAt: string;
+  /** platform list only: headline counts */
+  stats?: { activeMembers: number; pendingMembers: number; openCases: number };
 }
 
 export type PermissionMap = Record<string, { scopeType: ScopeType; scopeId: string | null }[]>;
@@ -388,6 +390,8 @@ interface PaperBase {
   decisionNote: string | null;
   lockVersion: number;
   trackName: string;
+  /** conference (event) the paper was submitted to (EVT-11) */
+  conference: { id: string; title: string } | null;
   coAuthors: { fullName: string; membershipId?: string; affiliation?: string }[];
   conflicts: { membershipIds?: string[]; note?: string };
 }
@@ -535,10 +539,23 @@ export interface EventCard {
   capacity: number | null;
   taken: number;
   registrationDeadline: string | null;
+  feeAmount: number | null;
+  callForPapers: boolean;
   host: { nameFa: string; slug: string } | null;
 }
 
-export interface EventDetail extends Omit<EventCard, "online"> {
+export interface CallForPapers {
+  open: boolean;
+  deadline: string | null;
+  trackName: string;
+  reviewMode: ReviewMode | null;
+  eligible: boolean;
+  /** papers stay with the organising university: guests from other universities cannot submit */
+  ownMembersOnly: boolean;
+}
+
+export interface EventDetail extends Omit<EventCard, "online" | "callForPapers"> {
+  callForPapers: CallForPapers | null;
   descriptionHtml: string | null;
   onlineUrl: string | null;
   waitlist: boolean;

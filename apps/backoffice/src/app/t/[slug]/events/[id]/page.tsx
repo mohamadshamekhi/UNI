@@ -7,7 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import { api, errorMessage } from "@uni/shared/api";
 import { fmtDateTime, fmtNum, fmtRial } from "@uni/shared/format";
-import { EVENT_STATUS, EVENT_VISIBILITY, REGISTRATION_STATUS } from "@uni/shared/labels";
+import { EVENT_STATUS, EVENT_VISIBILITY, REGISTRATION_STATUS, REVIEW_MODE } from "@uni/shared/labels";
 import { Badge } from "@uni/shared/ui/badge";
 import { Button } from "@uni/shared/ui/button";
 import { ReasonDialog } from "@uni/shared/ui/dialog";
@@ -15,7 +15,7 @@ import { Checkbox, Field, Input, Select } from "@uni/shared/ui/field";
 import { Card, PageHeader, Table, Td, Th } from "@uni/shared/ui/layout";
 import { EmptyState, QueryView } from "@uni/shared/ui/states";
 import { useToast } from "@uni/shared/ui/toast";
-import type { EventStatus, EventVisibility, FormFieldDef, RegistrationRule, RegistrationStatus, Role } from "@uni/shared/types";
+import type { EventStatus, EventVisibility, FormFieldDef, PaperTrack, RegistrationRule, RegistrationStatus, Role } from "@uni/shared/types";
 import { DateTimeInput } from "@/components/news/date-time";
 import { RichText } from "@/components/news/rich-text";
 import { uploadFile } from "@/components/news/upload";
@@ -45,6 +45,10 @@ interface EventRow {
   allowCancel: boolean;
   form: FormFieldDef[];
   feeAmount: number | null;
+  paperTrackId: string | null;
+  paperDeadline: string | null;
+  paperRule: RegistrationRule | null;
+  submittedPapers?: number;
   counts: Partial<Record<RegistrationStatus, number>>;
 }
 
@@ -86,6 +90,9 @@ const blank = (): Omit<EventRow, "id" | "status" | "counts"> => {
     allowCancel: true,
     form: [],
     feeAmount: null,
+    paperTrackId: null,
+    paperDeadline: null,
+    paperRule: null,
   };
 };
 
@@ -117,6 +124,7 @@ function EventEditor({ event }: { event?: EventRow }) {
   const descId = useId();
   const { flat } = useUnits(slug);
   const roles = useQuery({ queryKey: ["roles", slug], queryFn: () => api<Role[]>("/v1/admin/roles", { tenant: slug }), retry: false });
+  const tracks = useQuery({ queryKey: ["paper-tracks-admin", slug], queryFn: () => api<PaperTrack[]>("/v1/admin/paper-tracks", { tenant: slug }), retry: false });
   const partners = useQuery({ queryKey: ["event-partners", slug], queryFn: () => api<{ id: string; nameFa: string }[]>("/v1/admin/event-partner-tenants", { tenant: slug }) });
   const [v, setV] = useState(() => (event ? { ...blank(), ...event, descriptionHtml: event.descriptionHtml ?? "", category: event.category ?? "", organizer: event.organizer ?? "", location: event.location ?? "", onlineUrl: event.onlineUrl ?? "" } : blank()));
   const [tab, setTab] = useState<"details" | "registrations">("details");
@@ -154,6 +162,9 @@ function EventEditor({ event }: { event?: EventRow }) {
       allowCancel: v.allowCancel,
       form: v.form,
       feeAmount: v.feeAmount,
+      paperTrackId: v.paperTrackId,
+      paperDeadline: v.paperTrackId ? v.paperDeadline : null,
+      paperRule: v.paperTrackId ? v.paperRule : null,
     };
     try {
       if (!event) {
@@ -345,6 +356,64 @@ function EventEditor({ event }: { event?: EventRow }) {
               <Checkbox label="ثبت‌نام‌ها نیاز به تأیید برگزارکننده دارند" checked={v.requiresApproval} onChange={(e) => set({ requiresApproval: e.target.checked })} />
               <Checkbox label="شرکت‌کننده بتواند ثبت‌نام را لغو کند" checked={v.allowCancel} onChange={(e) => set({ allowCancel: e.target.checked })} />
             </div>
+          </Card>
+
+          <Card title="فراخوان مقاله" className="xl:col-span-2">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="روند داوری مقاله‌ها" hint="خالی یعنی این رویداد مقاله نمی‌پذیرد. حالت داوری از همین روند می‌آید.">
+                {(p) => (
+                  <Select {...p} value={v.paperTrackId ?? ""} onChange={(e) => set({ paperTrackId: e.target.value || null })}>
+                    <option value="">بدون فراخوان مقاله</option>
+                    {tracks.data?.filter((t) => t.active || t.id === v.paperTrackId).map((t) => (
+                      <option key={t.id} value={t.id}>{t.nameFa} — داوری {REVIEW_MODE[t.reviewMode].label}</option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+              {v.paperTrackId && (
+                <>
+                  <Field label="مهلت ارسال مقاله">{(p) => <DateTimeInput id={p.id} value={v.paperDeadline} onChange={(x) => set({ paperDeadline: x })} />}</Field>
+                  <Field label="چه کسانی مقاله بفرستند؟" hint="مقاله‌ها در همین دانشگاه داوری می‌شوند؛ فقط اعضای آن می‌توانند بفرستند.">
+                    {(p) => (
+                      <Select
+                        {...p}
+                        value={v.paperRule?.units?.length ? "units" : v.paperRule?.roles?.length ? "roles" : "members"}
+                        onChange={(e) => set({ paperRule: e.target.value === "members" ? null : e.target.value === "units" ? { units: v.organizerUnitId ? [{ id: v.organizerUnitId, tree: true }] : [] } : { roles: [] } })}
+                      >
+                        <option value="members">همه اعضای دانشگاه</option>
+                        <option value="units">اعضای واحدهای مشخص</option>
+                        <option value="roles">دارندگان نقش‌های مشخص</option>
+                      </Select>
+                    )}
+                  </Field>
+                </>
+              )}
+            </div>
+            {v.paperTrackId && v.paperRule?.units && (
+              <div className="mt-3 flex flex-col gap-1.5">
+                {flat.map((u) => {
+                  const on = v.paperRule?.units?.some((x) => x.id === u.id);
+                  return <Checkbox key={u.id} label={u.label} checked={!!on} onChange={(e) => set({ paperRule: { units: e.target.checked ? [...(v.paperRule?.units ?? []), { id: u.id, tree: true }] : (v.paperRule?.units ?? []).filter((x) => x.id !== u.id) } })} />;
+                })}
+              </div>
+            )}
+            {v.paperTrackId && v.paperRule?.roles && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {roles.data?.map((r) => {
+                  const on = v.paperRule?.roles?.includes(r.key);
+                  return (
+                    <button key={r.id} type="button" aria-pressed={on} onClick={() => set({ paperRule: { roles: on ? v.paperRule!.roles!.filter((k) => k !== r.key) : [...(v.paperRule?.roles ?? []), r.key] } })} className={`h-9 cursor-pointer rounded-full border px-3 text-sm ${on ? "border-primary bg-primary text-on-primary" : "border-border"}`}>
+                      {r.nameFa}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {event?.paperTrackId && (
+              <Link href={`/t/${slug}/papers?event=${event.id}`} className="mt-4 inline-flex h-10 items-center rounded-xl border border-border px-4 text-sm font-semibold hover:bg-muted/60">
+                مقاله‌های ارسالی ({fmtNum(event.submittedPapers ?? 0)})
+              </Link>
+            )}
           </Card>
 
           <Card className="xl:col-span-2">

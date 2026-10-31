@@ -127,6 +127,9 @@ class EventBody {
   @IsOptional() @IsArray() form?: unknown[];
   @IsOptional() @IsUUID() newsPostId?: string | null;
   @IsOptional() @IsInt() @Min(1000) @Max(100_000_000_000) feeAmount?: number | null;
+  @IsOptional() @IsUUID() paperTrackId?: string | null;
+  @IsOptional() @IsDateString() paperDeadline?: string | null;
+  @IsOptional() @IsObject() paperRule?: RegistrationRule | null;
 }
 
 class EventPatch {
@@ -151,6 +154,9 @@ class EventPatch {
   @IsOptional() @IsArray() form?: unknown[];
   @IsOptional() @IsUUID() newsPostId?: string | null;
   @IsOptional() @IsInt() @Min(1000) @Max(100_000_000_000) feeAmount?: number | null;
+  @IsOptional() @IsUUID() paperTrackId?: string | null;
+  @IsOptional() @IsDateString() paperDeadline?: string | null;
+  @IsOptional() @IsObject() paperRule?: RegistrationRule | null;
 }
 
 class EventStatusBody {

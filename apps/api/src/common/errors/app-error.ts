@@ -60,6 +60,8 @@ export const ErrorCodes = {
   GATEWAY_UNAVAILABLE: [HttpStatus.SERVICE_UNAVAILABLE, 'درگاه پرداخت در دسترس نیست؛ کمی بعد دوباره تلاش کنید.'],
   PAYMENT_NOT_PAYABLE: [HttpStatus.CONFLICT, 'این پرداخت در وضعیت فعلی قابل انجام نیست.'],
   PAYMENT_EXPIRED: [HttpStatus.CONFLICT, 'مهلت این پرداخت گذشته است.'],
+  CALL_FOR_PAPERS_CLOSED: [HttpStatus.CONFLICT, 'فراخوان مقاله این رویداد باز نیست یا مهلت ارسال گذشته است.'],
+  CALL_FOR_PAPERS_NOT_ELIGIBLE: [HttpStatus.FORBIDDEN, 'ارسال مقاله به این همایش برای گروه مشخصی است و شما در آن قرار ندارید.'],
   EVENT_FULL: [HttpStatus.CONFLICT, 'ظرفیت این رویداد تکمیل شده است.'],
   MAX_ROUNDS_REACHED: [HttpStatus.CONFLICT, 'سقف دورهای داوری این مقاله پر شده است؛ تصمیم نهایی را ثبت کنید.'],
   GUEST_LINK_INVALID: [HttpStatus.FORBIDDEN, 'لینک داوری نامعتبر، منقضی یا قبلاً استفاده شده است.'],

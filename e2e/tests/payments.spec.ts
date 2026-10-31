@@ -76,8 +76,11 @@ test.describe.serial("paid event and reconciliation (phase 6 gate)", () => {
 
   test("the registration is confirmed for the participant", async ({ page }) => {
     await signIn(page, WEB, payer.mobile, payer.password);
-    await page.goto(`${WEB}/${TENANT}/events/${eventId}`);
-    await expect(page.getByText("ثبت‌نام قطعی")).toBeVisible({ timeout: 15_000 });
+    // confirmation arrives through the outbox worker: reload until it has run
+    await expect(async () => {
+      await page.goto(`${WEB}/${TENANT}/events/${eventId}`);
+      await expect(page.getByText("ثبت‌نام قطعی")).toBeVisible({ timeout: 3_000 });
+    }).toPass({ timeout: 45_000 });
   });
 
   test("finance sees the payment and a balanced day", async ({ page }) => {

@@ -42,6 +42,8 @@ export interface PaperInput {
   field?: string;
   coAuthors?: CoAuthor[];
   conflicts?: { membershipIds?: string[]; note?: string };
+  /** conference paper: submitted to an event's call for papers (EVT-11) */
+  eventId?: string | null;
 }
 
 /** Year in the Iranian calendar for tracking codes, e.g. P-1405-000123. */
@@ -161,19 +163,69 @@ export class PapersService implements OnModuleInit {
     const me = this.me();
     if (!(await this.acl.hasAnywhere('paper.submit'))) throw new AppError('FORBIDDEN', { permission: 'paper.submit' });
     return this.db.run(async (tx) => {
-      const [track] = await tx.select().from(paperTracks).where(and(eq(paperTracks.id, input.trackId), eq(paperTracks.active, true))).limit(1);
+      if (!input.eventId && !input.trackId) throw new AppError('VALIDATION_FAILED', { field: 'trackId' });
+      // a conference paper always goes to the event's own track
+      const trackId = input.eventId ? (await this.callForPapers(tx, input.eventId, me.membershipId)).trackId : input.trackId;
+      const [track] = await tx.select().from(paperTracks).where(and(eq(paperTracks.id, trackId), eq(paperTracks.active, true))).limit(1);
       if (!track) throw new AppError('VALIDATION_FAILED', { field: 'trackId' });
       const [p] = await tx
         .insert(papers)
-        .values({ tenantId: me.tenantId, authorMembershipId: me.membershipId, reviewMode: track.reviewMode, trackId: input.trackId, title: input.title.trim(), degree: input.degree, ...this.clean(input) })
+        .values({
+          tenantId: me.tenantId,
+          authorMembershipId: me.membershipId,
+          reviewMode: track.reviewMode,
+          title: input.title.trim(),
+          degree: input.degree,
+          ...this.clean(input),
+          trackId,
+          eventId: input.eventId ?? null,
+        })
         .returning();
       return p!;
     });
   }
 
+  /**
+   * EVT-11: an event's call for papers — open (published, before the paper deadline) and the author
+   * matches its submission rule (members of the organising university by default, or chosen units /
+   * roles). Returns the track every paper of this call goes to.
+   */
+  async callForPapers(tx: Executor, eventId: string, membershipId: string): Promise<{ trackId: string; title: string }> {
+    const e = (
+      await tx.execute<{ id: string; title: string; status: string; paper_track_id: string | null; paper_deadline: Date | null; paper_rule: { members?: boolean; roles?: string[]; units?: { id: string; tree?: boolean }[] } | null }>(
+        sql`select id, title, status, paper_track_id, paper_deadline, paper_rule from events where id = ${eventId}`,
+      )
+    ).rows[0];
+    if (!e || !e.paper_track_id || ['draft', 'cancelled', 'held'].includes(e.status)) throw new AppError('CALL_FOR_PAPERS_CLOSED');
+    if (e.paper_deadline && new Date(e.paper_deadline) < new Date()) throw new AppError('CALL_FOR_PAPERS_CLOSED');
+    const rule = e.paper_rule ?? { members: true };
+    let ok = !!rule.members;
+    if (!ok && rule.roles?.length) {
+      ok = !!(
+        await tx.execute(sql`
+          select 1 from role_assignments ra join roles r on r.id = ra.role_id and r.archived_at is null
+          where ra.membership_id = ${membershipId} and ra.revoked_at is null and ra.valid_from <= now() and (ra.valid_to is null or ra.valid_to > now())
+            and r.key in (${sql.join(rule.roles.map((k) => sql`${k}`), sql`, `)}) limit 1`)
+      ).rows.length;
+    }
+    if (!ok && rule.units?.length) {
+      for (const u of rule.units) {
+        const hit = await tx.execute(sql`
+          select 1 from membership_units mu join org_units mine on mine.id = mu.unit_id join org_units target on target.id = ${u.id}
+          where mu.membership_id = ${membershipId} and (mine.id = target.id or (${!!u.tree} and mine.path like target.path || '%')) limit 1`);
+        if (hit.rows.length) {
+          ok = true;
+          break;
+        }
+      }
+    }
+    if (!ok) throw new AppError('CALL_FOR_PAPERS_NOT_ELIGIBLE');
+    return { trackId: e.paper_track_id, title: e.title };
+  }
+
   private clean(input: Partial<PaperInput>) {
     return {
-      ...(input.trackId ? { trackId: input.trackId } : {}),
+      ...(input.trackId && !input.eventId ? { trackId: input.trackId } : {}),
       ...(input.title !== undefined ? { title: input.title.trim() } : {}),
       ...(input.abstract !== undefined ? { abstract: input.abstract.trim() || null } : {}),
       ...(input.keywords ? { keywords: input.keywords.map((k) => k.trim()).filter(Boolean).slice(0, 10) } : {}),
@@ -191,6 +243,7 @@ export class PapersService implements OnModuleInit {
       if (p.authorMembershipId !== me.membershipId) throw new AppError('NOT_FOUND');
       if (p.status !== 'draft') throw new AppError('INVALID_STATE_TRANSITION');
       let reviewMode = p.reviewMode;
+      if (p.eventId) delete input.trackId;
       if (input.trackId && input.trackId !== p.trackId) {
         const [track] = await tx.select().from(paperTracks).where(and(eq(paperTracks.id, input.trackId), eq(paperTracks.active, true))).limit(1);
         if (!track) throw new AppError('VALIDATION_FAILED', { field: 'trackId' });
@@ -208,6 +261,7 @@ export class PapersService implements OnModuleInit {
       const p = await this.load(tx, paperId);
       if (p.authorMembershipId !== me.membershipId) throw new AppError('NOT_FOUND');
       await this.lock(tx, p, ['draft']);
+      if (p.eventId) await this.callForPapers(tx, p.eventId, me.membershipId);
       const [track] = await tx.select().from(paperTracks).where(eq(paperTracks.id, p.trackId));
       if (!track?.active) throw new AppError('VALIDATION_FAILED', { field: 'trackId' });
       const now = new Date();
@@ -626,15 +680,16 @@ export class PapersService implements OnModuleInit {
     );
   }
 
-  async adminList(q: { status?: PaperStatus; q?: string; limit: number; offset: number }) {
+  async adminList(q: { status?: PaperStatus; q?: string; eventId?: string; limit: number; offset: number }) {
     if (!(await this.isManager())) throw new AppError('FORBIDDEN');
     return this.db.run(async (tx) => {
       const where = sql`where p.status <> 'draft' ${q.status ? sql`and p.status = ${q.status}` : sql``}
-        ${q.q ? sql`and (p.title ilike ${'%' + q.q + '%'} or p.tracking_code ilike ${'%' + q.q + '%'})` : sql``}`;
+        ${q.q ? sql`and (p.title ilike ${'%' + q.q + '%'} or p.tracking_code ilike ${'%' + q.q + '%'})` : sql``}
+        ${q.eventId ? sql`and p.event_id = ${q.eventId}` : sql``}`;
       const items = (
         await tx.execute(sql`
           select p.id, p.tracking_code, p.title, p.status, p.round, p.review_mode, p.submitted_at, p.updated_at, t.name_fa as track_name,
-                 u.full_name as author_name,
+                 u.full_name as author_name, (select title from events e where e.id = p.event_id) as event_title,
                  (select count(*)::int from paper_reviews r where r.paper_id = p.id and r.round = p.round and r.status = 'submitted') as reviews_in,
                  (select count(*)::int from paper_reviews r where r.paper_id = p.id and r.round = p.round and r.status in ('invited', 'accepted', 'submitted')) as reviews_total
           from papers p join paper_tracks t on t.id = p.track_id

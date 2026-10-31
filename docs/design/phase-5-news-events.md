@@ -39,3 +39,12 @@ Registration rule kinds: `members` of the organising tenant, `roles`, `units`, `
 universities), `authenticated` (anyone signed in). Capacity counts active registrations; when full the user is
 wait-listed (if enabled) and promoted when someone cancels. Organisers (`event.manage` in the organiser unit's
 scope) see registrations and export them as CSV (UTF-8 with BOM, opens in Excel; EVT-06) and mark attendance.
+
+## Call for papers (EVT-11, added after phase 6)
+
+An event can open a call for papers on one of the university's paper tracks (`paper_track_id`), with
+its own deadline (`paper_deadline`) and submission rule (`paper_rule`: all members, chosen units or
+roles). Seeing the event, registering and submitting a paper stay three separate rules. A conference
+paper is an ordinary paper with `event_id`: it always uses the event's track (and so its review mode),
+and the deadline is checked on create and on submit. Papers are reviewed inside the organising
+university, so only its members can submit; guests from other universities can see and register.

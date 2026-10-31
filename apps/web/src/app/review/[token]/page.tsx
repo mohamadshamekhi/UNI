@@ -15,6 +15,20 @@ const key = (token: string) => `uni:guest:${token.slice(0, 12)}`;
  * Guest reviewer page (PAP-11). The one-time link becomes a session kept only in this tab; the
  * page shows nothing but this review.
  */
+/**
+ * The invitation link is single-use: exchange it once per page load even when the effect runs twice
+ * (React dev double-invoke, fast remounts) — a second call would spend the link and show an error.
+ */
+const exchanges = new Map<string, Promise<string>>();
+const exchange = (token: string) => {
+  let p = exchanges.get(token);
+  if (!p) {
+    p = api<{ sessionToken: string }>("/v1/guest/sessions", { method: "POST", public: true, body: { token } }).then((r) => r.sessionToken);
+    exchanges.set(token, p);
+  }
+  return p;
+};
+
 export default function GuestReviewPage() {
   const { token } = useParams<{ token: string }>();
   const [session, setSession] = useState<string | null>(null);
@@ -30,14 +44,14 @@ export default function GuestReviewPage() {
       }
     })();
     if (saved) return setSession(saved);
-    api<{ sessionToken: string }>("/v1/guest/sessions", { method: "POST", public: true, body: { token } })
-      .then((r) => {
+    exchange(token)
+      .then((sessionToken) => {
         try {
-          sessionStorage.setItem(key(token), r.sessionToken);
+          sessionStorage.setItem(key(token), sessionToken);
         } catch {
           /* private mode: keep it in memory only */
         }
-        setSession(r.sessionToken);
+        setSession(sessionToken);
       })
       .catch((e) => setError(errorMessage(e)));
   }, [token]);

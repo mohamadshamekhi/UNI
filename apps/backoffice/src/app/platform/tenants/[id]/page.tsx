@@ -16,6 +16,7 @@ import { api, errorMessage } from "@uni/shared/api";
 import { fmtBytes, fmtDateTime } from "@uni/shared/format";
 import { MODULES, TENANT_STATUS } from "@uni/shared/labels";
 import type { Tenant, TenantStatus } from "@uni/shared/types";
+import { TenantOverview } from "@/components/platform/tenant-overview";
 
 const NEXT_STATUS: Record<TenantStatus, { to: TenantStatus; label: string; danger: boolean }[]> = {
   draft: [
@@ -77,6 +78,7 @@ function TenantDetail({ tenant: t }: { tenant: Tenant }) {
           </>
         }
       />
+      <TenantOverview tenantId={t.id} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="مشخصات">
           <Dl

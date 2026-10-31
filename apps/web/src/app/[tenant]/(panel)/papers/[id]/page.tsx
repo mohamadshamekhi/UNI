@@ -55,7 +55,7 @@ function PaperInner() {
                 <div className="flex flex-wrap items-start justify-between gap-5">
                   <div className="min-w-0">
                     <p className="text-sm text-white/70">
-                      {p.trackName} · داوری {REVIEW_MODE[p.reviewMode].label}
+                      {p.conference ? `همایش «${p.conference.title}»` : p.trackName} · داوری {REVIEW_MODE[p.reviewMode].label}
                       {p.trackingCode && <> · <span dir="ltr" className="font-mono">{p.trackingCode}</span></>}
                     </p>
                     <h1 className="mt-1 text-2xl font-black sm:text-3xl">{p.title}</h1>

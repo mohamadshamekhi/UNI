@@ -22,6 +22,14 @@ const HOLDING: RegistrationStatus[] = [...ACTIVE, 'awaiting_payment'];
 /** time a paid registration has to pay before its seat is released */
 const PAY_WINDOW_MS = 48 * 3_600_000;
 const formSchema = z.array(formFieldSchema).max(20);
+/** who may submit to a call for papers: members of the organising university, by unit or role */
+const paperRuleSchema = z
+  .object({
+    members: z.boolean().optional(),
+    roles: z.array(z.string().max(60)).max(20).optional(),
+    units: z.array(z.object({ id: z.string().uuid(), tree: z.boolean().optional() })).max(20).optional(),
+  })
+  .strict();
 const ruleSchema = z
   .object({
     members: z.boolean().optional(),
@@ -54,6 +62,9 @@ export interface EventInput {
   form?: unknown[];
   newsPostId?: string | null;
   feeAmount?: number | null;
+  paperTrackId?: string | null;
+  paperDeadline?: string | null;
+  paperRule?: RegistrationRule | null;
 }
 
 const code = () => randomBytes(5).toString('base64url').toUpperCase().replace(/[^A-Z0-9]/g, 'X').slice(0, 8);
@@ -116,6 +127,13 @@ export class EventsService implements OnModuleInit {
     return pr.id;
   }
 
+  /** A call for papers needs an active track of the same university (EVT-11). */
+  private async checkTrack(tx: Executor, trackId: string | null | undefined) {
+    if (!trackId) return;
+    const r = await tx.execute(sql`select 1 from paper_tracks where id = ${trackId} and active`);
+    if (!r.rows.length) throw new AppError('VALIDATION_FAILED', { field: 'paperTrackId' });
+  }
+
   /** The event's price is a versioned tariff `event:<id>` (PAY-10); the organiser sets it with the event. */
   private async syncFee(tx: Executor, e: EventRow, amount: number | null | undefined) {
     if (amount === undefined || amount === null) return;
@@ -139,6 +157,8 @@ export class EventsService implements OnModuleInit {
     const form = input.form !== undefined ? formSchema.safeParse(input.form) : null;
     if (form && !form.success) throw new AppError('VALIDATION_FAILED', { field: 'form' });
     if (input.startsAt && input.endsAt && new Date(input.endsAt) < new Date(input.startsAt)) throw new AppError('VALIDATION_FAILED', { field: 'endsAt' });
+    const paperRule = input.paperRule ? paperRuleSchema.safeParse(input.paperRule) : null;
+    if (paperRule && !paperRule.success) throw new AppError('VALIDATION_FAILED', { field: 'paperRule' });
     const parsedRule = input.registrationRule ? ruleSchema.safeParse(input.registrationRule) : null;
     if (parsedRule && !parsedRule.success) throw new AppError('VALIDATION_FAILED', { field: 'registrationRule' });
     const rule = parsedRule?.data;
@@ -165,6 +185,9 @@ export class EventsService implements OnModuleInit {
       ...(form ? { form: form.data } : {}),
       ...(input.newsPostId !== undefined ? { newsPostId: input.newsPostId } : {}),
       ...(input.feeAmount !== undefined ? { feeAmount: input.feeAmount } : {}),
+      ...(input.paperTrackId !== undefined ? { paperTrackId: input.paperTrackId } : {}),
+      ...(input.paperDeadline !== undefined ? { paperDeadline: input.paperDeadline ? new Date(input.paperDeadline) : null } : {}),
+      ...(input.paperRule !== undefined ? { paperRule: paperRule?.data ?? null } : {}),
     };
   }
 
@@ -175,6 +198,7 @@ export class EventsService implements OnModuleInit {
     const ctx = requestContext.get();
     const f = this.fields(input);
     const [e] = await this.db.run(async (tx) => {
+      await this.checkTrack(tx, input.paperTrackId);
       const rows = await tx
         .insert(events)
         .values({ tenantId: ctx.tenant!.id, title: f.title!, startsAt: f.startsAt!, endsAt: f.endsAt!, visibility: f.visibility!, registrationRule: f.registrationRule!, ...f, createdBy: ctx.userId })
@@ -198,6 +222,7 @@ export class EventsService implements OnModuleInit {
       await this.assertManage(e.organizerUnitId);
       if (input.organizerUnitId !== undefined && input.organizerUnitId !== e.organizerUnitId) await this.assertManage(input.organizerUnitId ?? null);
       if (e.status === 'cancelled' || e.status === 'held') throw new AppError('INVALID_STATE_TRANSITION');
+      if (input.paperTrackId !== undefined && input.paperTrackId !== e.paperTrackId) await this.checkTrack(tx, input.paperTrackId);
       const [u] = await tx.update(events).set({ ...this.fields(input), updatedAt: new Date() }).where(eq(events.id, id)).returning();
       await this.syncFee(tx, u!, input.feeAmount);
       return u!;
@@ -244,7 +269,8 @@ export class EventsService implements OnModuleInit {
       const counts = (
         await tx.execute<{ status: RegistrationStatus; n: number }>(sql`select status, count(*)::int as n from event_registrations where event_id = ${id} group by status`)
       ).rows;
-      return { ...e, counts: Object.fromEntries(counts.map((c) => [c.status, c.n])) };
+      const [{ papers }] = (await tx.execute<{ papers: number }>(sql`select count(*)::int as papers from papers where event_id = ${id} and status <> 'draft'`)).rows as [{ papers: number }];
+      return { ...e, counts: Object.fromEntries(counts.map((c) => [c.status, c.n])), submittedPapers: papers };
     });
   }
 
@@ -331,7 +357,7 @@ export class EventsService implements OnModuleInit {
     const rows = (
       await this.db.sys.execute<EventRow & Record<string, unknown>>(sql`
         select e.id, e.tenant_id, e.title, e.category, e.organizer, e.starts_at, e.ends_at, e.location, e.online_url, e.cover_file_id,
-               e.status, e.visibility, e.capacity, e.registration_deadline, t.name_fa as tenant_name, t.slug as tenant_slug,
+               e.status, e.visibility, e.capacity, e.registration_deadline, e.fee_amount, (e.paper_track_id is not null and (e.paper_deadline is null or e.paper_deadline > now())) as call_open, t.name_fa as tenant_name, t.slug as tenant_slug,
                (select count(*)::int from event_registrations r where r.event_id = e.id and r.status in ('registered', 'pending', 'approved', 'awaiting_payment')) as taken
         from events e join tenants t on t.id = e.tenant_id and t.status = 'active'
         where e.status <> 'draft'
@@ -354,6 +380,8 @@ export class EventsService implements OnModuleInit {
       capacity: r.capacity,
       taken: r.taken,
       registrationDeadline: r.registration_deadline,
+      feeAmount: r.fee_amount === null ? null : Number(r.fee_amount),
+      callForPapers: !!r.call_open,
       host: r.tenant_id === tenantId ? null : { nameFa: r.tenant_name, slug: r.tenant_slug },
     }));
   }
@@ -379,6 +407,19 @@ export class EventsService implements OnModuleInit {
     const [f] = await this.db.sys.select().from(fileObjects).where(eq(fileObjects.id, e.coverFileId)).limit(1);
     if (!f || f.tenantId !== e.tenantId || f.isConfidential || (f.scanStatus !== 'clean' && f.scanStatus !== 'skipped')) throw new AppError('NOT_FOUND');
     return f;
+  }
+
+  /**
+   * EVT-11 for the event page: the call's track, deadline and whether this viewer may submit.
+   * Papers live in the organising university, so only its own members can submit.
+   */
+  private async callInfo(e: EventRow, userId: string | null) {
+    if (!e.paperTrackId) return null;
+    const [track] = (await this.db.sys.execute<{ name_fa: string; review_mode: string }>(sql`select name_fa, review_mode from paper_tracks where id = ${e.paperTrackId}`)).rows;
+    const open = ['published', 'registration_open', 'registration_closed'].includes(e.status) && (!e.paperDeadline || e.paperDeadline > new Date());
+    const sameTenant = requestContext.get().tenant!.id === e.tenantId;
+    const check = userId && sameTenant ? await this.eligible({ ...e, registrationRule: e.paperRule ?? { members: true } }, userId) : null;
+    return { open, deadline: e.paperDeadline, trackName: track?.name_fa ?? '', reviewMode: track?.review_mode ?? null, eligible: !!check?.ok && !!check.membershipId, ownMembersOnly: !sameTenant };
   }
 
   /** EVT-03: may this signed-in user register? Evaluated against the organising tenant. */
@@ -448,6 +489,7 @@ export class EventsService implements OnModuleInit {
       form: e.form,
       host: e.tenantId === ctx.tenant!.id ? null : host,
       registration: { open, eligible, full: !!e.capacity && taken >= e.capacity },
+      callForPapers: await this.callInfo(e, ctx.userId ?? null),
       mine: mine ? { id: mine.id, status: mine.status, code: mine.code, attended: !!mine.attendedAt, paymentId: mine.paymentRequestId } : null,
       feeAmount: e.feeAmount,
     };

@@ -1,3 +1,4 @@
+import { PDFDocument } from 'pdf-lib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { as, createPlatformAdmin, createTenant, createUnit, login, nextMobile, PNG, registerStudent, setPasswordViaReset, startApp, sysPool, type TenantFixture, type TestApp } from './helpers.js';
 
@@ -266,6 +267,66 @@ describe('news and events (phase 5, NWS-01..15, EVT-01..12)', () => {
       await t.http.post(`/v1/admin/events/${r.body.id}/status`).set(as(organiser.token, tf.slug)).send({ status: 'cancelled', reason: 'تداخل برنامه' }).expect(200);
       await t.flush();
       expect((await inbox(sciStudent.userId)).some((n) => n.event === 'event.cancelled')).toBe(true);
+    });
+  });
+
+  describe('call for papers (EVT-11)', () => {
+    let ev = '';
+    let track = '';
+    const pdf = async () => {
+      const d = await PDFDocument.create();
+      d.addPage().drawText('Conference paper');
+      return Buffer.from(await d.save());
+    };
+
+    it('an event opens a call on a paper track with its own submission rule', async () => {
+      track = (await t.http.post('/v1/admin/paper-tracks').set(admin()).send({ nameFa: 'همایش ملی هوش مصنوعی', reviewMode: 'double_blind' }).expect(201)).body.id;
+      const start = new Date(Date.now() + 30 * 86_400_000);
+      const r = await t.http
+        .post('/v1/admin/events')
+        .set(as(organiser.token, tf.slug))
+        .send({
+          title: 'همایش ملی هوش مصنوعی',
+          organizerUnitId: eng,
+          startsAt: start.toISOString(),
+          endsAt: new Date(start.getTime() + 86_400_000).toISOString(),
+          visibility: 'public',
+          registrationRule: { authenticated: true },
+          paperTrackId: track,
+          paperDeadline: new Date(Date.now() + 10 * 86_400_000).toISOString(),
+          paperRule: { units: [{ id: eng, tree: true }] },
+        })
+        .expect(201);
+      ev = r.body.id;
+      await t.http.post(`/v1/admin/events/${ev}/status`).set(as(organiser.token, tf.slug)).send({ status: 'registration_open' }).expect(200);
+      const inside = await t.http.get(`/v1/events/${ev}`).set(as(engStudent.token, tf.slug)).expect(200);
+      expect(inside.body.callForPapers).toMatchObject({ open: true, eligible: true, trackName: 'همایش ملی هوش مصنوعی', reviewMode: 'double_blind' });
+      const outside = await t.http.get(`/v1/events/${ev}`).set(as(sciStudent.token, tf.slug)).expect(200);
+      expect(outside.body.callForPapers.eligible).toBe(false);
+      // other universities may see and register, but papers stay with the organising university
+      const guest = await t.http.get(`/v1/events/${ev}`).set(as(outsider.token, other.slug)).expect(200);
+      expect(guest.body.callForPapers).toMatchObject({ eligible: false, ownMembersOnly: true });
+    });
+
+    it('a conference paper goes to the event track and shows up for the organisers', async () => {
+      const other = (await t.http.post('/v1/admin/paper-tracks').set(admin()).send({ nameFa: 'مجله', reviewMode: 'open' }).expect(201)).body.id;
+      await t.http.post('/v1/papers').set(as(sciStudent.token, tf.slug)).send({ eventId: ev, title: 'خارج از قاعده', degree: 'msc' }).expect(403);
+      const d = await t.http.post('/v1/papers').set(as(engStudent.token, tf.slug)).send({ eventId: ev, trackId: other, title: 'شبکه‌های عصبی کم‌مصرف', degree: 'msc' }).expect(201);
+      expect(d.body.conference).toMatchObject({ id: ev });
+      expect(d.body.reviewMode).toBe('double_blind');
+      const f = await t.http.post('/v1/files').set(as(engStudent.token, tf.slug)).field('purpose', 'paper_manuscript').attach('file', await pdf(), 'paper.pdf').expect(201);
+      await t.http.post(`/v1/papers/${d.body.id}/submit`).set(as(engStudent.token, tf.slug)).send({ manuscriptFileId: f.body.id }).expect(200);
+      const list = await t.http.get(`/v1/admin/papers?eventId=${ev}`).set(admin()).expect(200);
+      expect(list.body.items).toHaveLength(1);
+      expect(list.body.items[0].event_title).toBe('همایش ملی هوش مصنوعی');
+      const e = await t.http.get(`/v1/admin/events/${ev}`).set(as(organiser.token, tf.slug)).expect(200);
+      expect(e.body.submittedPapers).toBe(1);
+    });
+
+    it('after the paper deadline the call is closed', async () => {
+      await t.http.patch(`/v1/admin/events/${ev}`).set(as(organiser.token, tf.slug)).send({ paperDeadline: new Date(Date.now() - 60_000).toISOString() }).expect(200);
+      await t.http.post('/v1/papers').set(as(engStudent.token, tf.slug)).send({ eventId: ev, title: 'دیرهنگام', degree: 'msc' }).expect(409);
+      expect((await t.http.get(`/v1/events/${ev}`).set(as(engStudent.token, tf.slug)).expect(200)).body.callForPapers.open).toBe(false);
     });
   });
 });

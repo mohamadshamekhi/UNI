@@ -79,13 +79,89 @@ export class TenantsService {
 
   async list(q?: string) {
     const where = q ? or(ilike(tenants.nameFa, `%${normalizeFa(q)}%`), ilike(tenants.slug, `%${q}%`)) : undefined;
-    return this.db.run((tx) => tx.select().from(tenants).where(where).orderBy(asc(tenants.createdAt)));
+    const rows = await this.db.run((tx) => tx.select().from(tenants).where(where).orderBy(asc(tenants.createdAt)));
+    // headline counts for the platform list (aggregates only)
+    const counts = (
+      await this.db.sys.execute<{ tenant_id: string; active: number; pending: number; open_cases: number }>(sql`
+        select t.id as tenant_id,
+               (select count(*)::int from memberships m where m.tenant_id = t.id and m.status = 'active') as active,
+               (select count(*)::int from memberships m where m.tenant_id = t.id and m.status = 'pending_review') as pending,
+               (select count(*)::int from cases c where c.tenant_id = t.id and c.status_category in ('open', 'revising')) as open_cases
+        from tenants t`)
+    ).rows;
+    const byId = new Map(counts.map((c) => [c.tenant_id, c]));
+    return rows.map((r) => ({ ...r, stats: { activeMembers: byId.get(r.id)?.active ?? 0, pendingMembers: byId.get(r.id)?.pending ?? 0, openCases: byId.get(r.id)?.open_cases ?? 0 } }));
   }
 
   async get(id: string) {
     const [t] = await this.db.run((tx) => tx.select().from(tenants).where(eq(tenants.id, id)));
     if (!t) throw new AppError('NOT_FOUND');
     return t;
+  }
+
+  /**
+   * Platform view of one university (TEN, section 5 «مدیر کل»): aggregate numbers only — people,
+   * processes, content, money and storage — plus who administers it. No case, paper or personal
+   * record contents; those stay with the university's own staff.
+   */
+  async overview(id: string) {
+    const t = await this.get(id);
+    const db = this.db.sys;
+    const count = async <T extends Record<string, unknown>>(q: ReturnType<typeof sql>) => (await db.execute<T>(q)).rows;
+    const [members, cases, theses, papers, events, news, payments, files, activity, units] = await Promise.all([
+      count<{ kind: string; status: string; n: number }>(sql`select kind, status, count(*)::int as n from memberships where tenant_id = ${id} group by 1, 2`),
+      count<{ status: string; n: number }>(sql`select status_category as status, count(*)::int as n from cases where tenant_id = ${id} group by 1`),
+      count<{ status: string; n: number }>(sql`select status, count(*)::int as n from theses where tenant_id = ${id} group by 1`),
+      count<{ status: string; n: number }>(sql`select status, count(*)::int as n from papers where tenant_id = ${id} and status <> 'draft' group by 1`),
+      count<{ total: number; upcoming: number; registrations: number }>(sql`
+        select count(*)::int as total, count(*) filter (where ends_at >= now() and status <> 'cancelled')::int as upcoming,
+               (select count(*)::int from event_registrations r where r.tenant_id = ${id} and r.status <> 'cancelled') as registrations
+        from events where tenant_id = ${id} and status <> 'draft'`),
+      count<{ published: number; channels: number }>(sql`
+        select count(*) filter (where status = 'published')::int as published, (select count(*)::int from news_channels c where c.tenant_id = ${id}) as channels
+        from news_posts where tenant_id = ${id}`),
+      count<{ paid: string; paid_count: number; review: number; open: number }>(sql`
+        select coalesce(sum(amount) filter (where status = 'succeeded'), 0)::text as paid, count(*) filter (where status = 'succeeded')::int as paid_count,
+               count(*) filter (where status = 'review')::int as review, count(*) filter (where status in ('created', 'pending', 'failed'))::int as open
+        from payment_requests where tenant_id = ${id}`),
+      count<{ n: number; bytes: string }>(sql`select count(*)::int as n, coalesce(sum(size_bytes), 0)::text as bytes from file_objects where tenant_id = ${id} and deleted_at is null`),
+      count<{ last_at: Date | null; actions_30d: number; sms_30d: number; logins_30d: number }>(sql`
+        select (select to_json(max(occurred_at)) #>> '{}' from audit_logs where tenant_id = ${id}) as last_at,
+               (select count(*)::int from audit_logs where tenant_id = ${id} and occurred_at > now() - interval '30 days') as actions_30d,
+               (select count(*)::int from notification_deliveries where tenant_id = ${id} and channel = 'sms' and created_at > now() - interval '30 days') as sms_30d,
+               (select count(distinct m.user_id)::int from sessions s join memberships m on m.user_id = s.user_id and m.tenant_id = ${id} and m.status = 'active'
+                 where s.last_used_at > now() - interval '30 days') as logins_30d`),
+      count<{ units: number; roles: number }>(sql`
+        select (select count(*)::int from org_units where tenant_id = ${id} and status = 'active') as units,
+               (select count(*)::int from roles where tenant_id = ${id} and archived_at is null) as roles`),
+    ]);
+    const admins = await count<{ full_name: string; mobile: string | null; status: string; since: Date }>(sql`
+      select distinct on (m.id) u.full_name, u.mobile, m.status, to_json(ra.created_at) #>> '{}' as since
+      from role_assignments ra join roles r on r.id = ra.role_id and r.template_key = 'university_admin'
+      join memberships m on m.id = ra.membership_id join users u on u.id = m.user_id
+      where ra.tenant_id = ${id} and ra.revoked_at is null
+      order by m.id, ra.created_at`);
+    const by = (rows: { status: string; n: number }[]) => Object.fromEntries(rows.map((r) => [r.status, r.n]));
+    const sum = (rows: { n: number }[]) => rows.reduce((a, r) => a + r.n, 0);
+    await this.audit.record({ action: 'tenant.overview.viewed', tenantId: id, targetType: 'tenant', targetId: id });
+    return {
+      tenant: { id: t.id, slug: t.slug, nameFa: t.nameFa, status: t.status, enabledModules: t.enabledModules },
+      members: {
+        total: sum(members),
+        byStatus: members.reduce<Record<string, number>>((a, r) => ({ ...a, [r.status]: (a[r.status] ?? 0) + r.n }), {}),
+        activeByKind: Object.fromEntries(members.filter((r) => r.status === 'active').map((r) => [r.kind, r.n])),
+      },
+      admins: admins.map((a) => ({ fullName: a.full_name, mobile: a.mobile, status: a.status, since: a.since })),
+      structure: units[0]!,
+      cases: { total: sum(cases), byStatus: by(cases) },
+      theses: { total: sum(theses), byStatus: by(theses) },
+      papers: { total: sum(papers), byStatus: by(papers) },
+      events: events[0]!,
+      news: news[0]!,
+      payments: { paid: Number(payments[0]!.paid), paidCount: payments[0]!.paid_count, review: payments[0]!.review, open: payments[0]!.open },
+      storage: { files: files[0]!.n, bytes: Number(files[0]!.bytes), quota: t.settings.storageQuotaBytes ?? null },
+      activity: { lastAt: activity[0]!.last_at, actions30d: activity[0]!.actions_30d, sms30d: activity[0]!.sms_30d, activeUsers30d: activity[0]!.logins_30d },
+    };
   }
 
   async update(id: string, patch: { nameFa?: string; nameEn?: string; domain?: string | null; settings?: TenantSettings }) {

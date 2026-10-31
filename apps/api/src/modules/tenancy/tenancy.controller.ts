@@ -123,6 +123,11 @@ export class PlatformTenantsController {
     return this.tenants.get(id);
   }
 
+  @Get(':id/overview')
+  overview(@Param('id', ParseUUIDPipe) id: string) {
+    return this.tenants.overview(id);
+  }
+
   @Patch(':id')
   update(@Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateTenantBody) {
     return this.tenants.update(id, body);

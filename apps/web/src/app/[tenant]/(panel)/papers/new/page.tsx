@@ -1,24 +1,39 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, CalendarDays, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState, type FormEvent } from "react";
 import { api, errorMessage } from "@uni/shared/api";
 import { DEGREE, REVIEW_MODE } from "@uni/shared/labels";
 import { Button } from "@uni/shared/ui/button";
 import { Field, Input, Select, Textarea } from "@uni/shared/ui/field";
-import { QueryView } from "@uni/shared/ui/states";
-import type { PaperTrack } from "@uni/shared/types";
+import { Loading, QueryView } from "@uni/shared/ui/states";
+import type { EventDetail, PaperTrack } from "@uni/shared/types";
+import { fmtDateTime } from "@uni/shared/format";
 import { ManuscriptUpload } from "@/components/paper/manuscript-upload";
 import { useTenantSlug } from "@/lib/tenant";
 
-/** PAP-01: only the manuscript and the degree are required; the rest helps reviewer assignment. */
 export default function NewPaperPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <NewPaper />
+    </Suspense>
+  );
+}
+
+/**
+ * PAP-01: only the manuscript and the degree are required; the rest helps reviewer assignment.
+ * With `?event=` it is a conference paper: the event's call decides the track (EVT-11).
+ */
+function NewPaper() {
   const slug = useTenantSlug();
   const router = useRouter();
+  const eventId = useSearchParams().get("event");
   const tracks = useQuery({ queryKey: ["paper-tracks", slug], queryFn: () => api<PaperTrack[]>("/v1/paper-tracks", { tenant: slug }) });
+  const event = useQuery({ queryKey: ["event", slug, eventId], enabled: !!eventId, queryFn: () => api<EventDetail>(`/v1/events/${eventId}`, { tenant: slug }) });
+  const call = event.data?.callForPapers ?? null;
   const [v, setV] = useState({ trackId: "", title: "", abstract: "", keywords: "", degree: "", field: "", conflictNote: "" });
   const [coAuthors, setCoAuthors] = useState<{ fullName: string; affiliation: string }[]>([]);
   const [file, setFile] = useState<{ id: string; name: string; size: number } | null>(null);
@@ -30,7 +45,7 @@ export default function NewPaperPage() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const err: Record<string, string> = {};
-    if (!v.trackId) err.trackId = "روند ارسال را انتخاب کنید.";
+    if (!eventId && !v.trackId) err.trackId = "روند ارسال را انتخاب کنید.";
     if (!v.title.trim()) err.title = "عنوان مقاله را بنویسید.";
     if (!v.degree) err.degree = "مقطع تحصیلی را انتخاب کنید.";
     if (!file) err.file = "فایل مقاله را بارگذاری کنید.";
@@ -43,7 +58,7 @@ export default function NewPaperPage() {
         method: "POST",
         tenant: slug,
         body: {
-          trackId: v.trackId,
+          ...(eventId ? { eventId } : { trackId: v.trackId }),
           title: v.title.trim(),
           abstract: v.abstract.trim() || undefined,
           keywords: v.keywords.split(/[,،]/).map((k) => k.trim()).filter(Boolean),
@@ -68,12 +83,27 @@ export default function NewPaperPage() {
         مقالات من
       </Link>
       <div className="enter rounded-[2rem] border border-border bg-card p-6 shadow-[0_30px_60px_-30px_rgb(15_23_42/0.35)] sm:p-10">
-        <h1 className="text-2xl font-black">ارسال مقاله</h1>
+        <h1 className="text-2xl font-black">{eventId ? "ارسال مقاله به همایش" : "ارسال مقاله"}</h1>
         <p className="mt-2 mb-8 text-sm leading-7 text-muted-foreground">پس از ارسال، شناسه پیگیری صادر می‌شود و مقاله در صف بررسی اولیه قرار می‌گیرد.</p>
         <QueryView query={tracks}>
           {(list) => (
             <form onSubmit={submit} noValidate className="flex flex-col gap-5">
-              <Field label="روند ارسال" required error={errors.trackId} hint={track ? `داوری ${REVIEW_MODE[track.reviewMode].label}: ${REVIEW_MODE[track.reviewMode].hint}` : undefined}>
+              {eventId && event.data && (
+                <div className="flex items-start gap-3 rounded-2xl bg-muted/60 p-4">
+                  <CalendarDays aria-hidden className="mt-0.5 size-5 text-primary" />
+                  <div className="text-sm leading-7">
+                    <p className="font-bold">{event.data.title}</p>
+                    {call && (
+                      <p className="text-muted-foreground">
+                        داوری {call.reviewMode ? REVIEW_MODE[call.reviewMode as keyof typeof REVIEW_MODE].label : ""}
+                        {call.deadline && <> · مهلت ارسال {fmtDateTime(call.deadline)}</>}
+                      </p>
+                    )}
+                    {call && (!call.open || !call.eligible) && <p className="text-danger">{!call.open ? "مهلت ارسال مقاله به این همایش گذشته است." : "ارسال مقاله به این همایش برای گروه مشخصی است."}</p>}
+                  </div>
+                </div>
+              )}
+              {!eventId && <Field label="روند ارسال" required error={errors.trackId} hint={track ? `داوری ${REVIEW_MODE[track.reviewMode].label}: ${REVIEW_MODE[track.reviewMode].hint}` : undefined}>
                 {(p) => (
                   <Select {...p} value={v.trackId} onChange={(e) => setV({ ...v, trackId: e.target.value })}>
                     <option value="">انتخاب کنید</option>
@@ -82,7 +112,7 @@ export default function NewPaperPage() {
                     ))}
                   </Select>
                 )}
-              </Field>
+              </Field>}
               <Field label="عنوان مقاله" required error={errors.title}>
                 {(p) => <Input {...p} className="h-11" value={v.title} maxLength={300} onChange={(e) => setV({ ...v, title: e.target.value })} />}
               </Field>

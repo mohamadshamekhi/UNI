@@ -46,7 +46,9 @@ class ConflictsDto {
 }
 
 class PaperBody {
-  @IsUUID() trackId: string;
+  /** ignored for a conference paper: the event's track is used */
+  @IsOptional() @IsUUID() trackId: string;
+  @IsOptional() @IsUUID() eventId?: string;
   @IsString() @IsNotEmpty() @MaxLength(300) title: string;
   @IsOptional() @IsString() @MaxLength(5000) abstract?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) @MaxLength(60, { each: true }) keywords?: string[];
@@ -143,6 +145,7 @@ class TrackPatch {
 class AdminListQuery extends PageQuery {
   @IsOptional() @IsIn(STATUSES) status?: PaperStatus;
   @IsOptional() @IsString() @MaxLength(100) q?: string;
+  @IsOptional() @IsUUID() eventId?: string;
 }
 
 class SessionBody {
